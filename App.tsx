@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Plus, Search, Music2, UploadCloud, Home, Users } from 'lucide-react';
+import { Plus, Search, Music2, UploadCloud, Home, Users, Download } from 'lucide-react';
 import { Song, ViewState } from './types';
 import { SongCard } from './components/SongCard';
 import { AddSongModal } from './components/AddSongModal';
@@ -8,6 +8,7 @@ import { ArtistLibrary } from './components/ArtistLibrary';
 import { ArtistDetail } from './components/ArtistDetail';
 import { AlbumDetail } from './components/AlbumDetail';
 import { fetchSongMetadata } from './services/musicService';
+import { exportSongsToCSV } from './utils/csvExporter';
 
 // Constants
 const STORAGE_KEY = 'melodylog_songs';
@@ -179,6 +180,14 @@ const App: React.FC = () => {
                         <UploadCloud size={20} />
                       </button>
                       <button 
+                        onClick={() => exportSongsToCSV(songs)}
+                        className="p-2 text-blue-200 hover:bg-white/10 hover:text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        title="导出CSV"
+                        disabled={songs.length === 0}
+                      >
+                        <Download size={20} />
+                      </button>
+                      <button 
                         onClick={() => setIsAddModalOpen(true)}
                         className="ml-1 bg-brand-light hover:bg-blue-400 text-white px-3 py-1.5 rounded-full text-sm font-medium shadow-lg shadow-blue-900/20 transition-all flex items-center gap-1"
                       >
@@ -293,14 +302,22 @@ const App: React.FC = () => {
         </button>
       </div>
 
-      {/* Mobile Extra Import Button */}
-      <div className="md:hidden fixed bottom-20 right-4 z-40">
-         <button
+      {/* Mobile Extra Buttons */}
+      <div className="md:hidden flex fixed bottom-20 right-4 z-40 gap-2">
+        <button
           onClick={() => setIsImportModalOpen(true)}
           className="bg-white text-brand-dark p-3 rounded-full shadow-lg border border-slate-100 active:scale-95 transition-transform"
           aria-label="导入"
         >
           <UploadCloud size={20} />
+        </button>
+        <button
+          onClick={() => exportSongsToCSV(songs)}
+          className="bg-white text-brand-dark p-3 rounded-full shadow-lg border border-slate-100 active:scale-95 transition-transform disabled:opacity-50 disabled:cursor-not-allowed"
+          aria-label="导出CSV"
+          disabled={songs.length === 0}
+        >
+          <Download size={20} />
         </button>
       </div>
 
