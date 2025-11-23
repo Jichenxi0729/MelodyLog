@@ -1,14 +1,15 @@
 import React from 'react';
 import { Song } from '../types';
-import { Calendar, Disc, User } from 'lucide-react';
+import { Calendar, Disc, User, Trash2 } from 'lucide-react';
 
 interface SongCardProps {
   song: Song;
   onArtistClick?: (artist: string) => void;
   onAlbumClick?: (album: string) => void;
+  onDelete?: () => void;
 }
 
-export const SongCard: React.FC<SongCardProps> = ({ song, onArtistClick, onAlbumClick }) => {
+export const SongCard: React.FC<SongCardProps> = ({ song, onArtistClick, onAlbumClick, onDelete }) => {
   const formattedDate = new Date(song.addedAt).toLocaleDateString('zh-CN', {
     month: 'numeric',
     day: 'numeric',
@@ -29,7 +30,7 @@ export const SongCard: React.FC<SongCardProps> = ({ song, onArtistClick, onAlbum
   };
 
   return (
-    <div className="group relative bg-white rounded-lg shadow-sm hover:shadow-md transition-all duration-300 overflow-hidden border border-slate-100 h-[64px] flex items-center pr-3 w-full">
+    <div className="group relative bg-white rounded-lg shadow-sm hover:shadow-md transition-all duration-300 overflow-hidden border border-slate-100 h-[64px] flex items-center pr-3 md:pr-3 w-full">
       {/* Cover Art - Smaller */}
       <div className="flex-shrink-0 w-[64px] h-[64px] relative">
         <img
@@ -44,10 +45,9 @@ export const SongCard: React.FC<SongCardProps> = ({ song, onArtistClick, onAlbum
       {/* Info */}
       <div className="flex-1 min-w-0 ml-3 flex flex-col justify-center h-full py-1.5 space-y-0.5">
         <div className="flex items-baseline justify-between">
-          <h3 className="text-sm font-bold text-slate-800 truncate pr-2" title={song.title}>
+          <h3 className="text-sm font-bold text-slate-800 truncate pr-2 md:pr-2" title={song.title}>
             {song.title}
           </h3>
-          <span className="text-[10px] text-slate-400 font-medium flex-shrink-0">{formattedDate}</span>
         </div>
         
         {/* Artist - Clickable */}
@@ -77,6 +77,24 @@ export const SongCard: React.FC<SongCardProps> = ({ song, onArtistClick, onAlbum
             </span>
           )}
         </div>
+      </div>
+      
+      {/* Metadata column with date and delete button */}
+      <div className="absolute right-2 flex flex-col items-end gap-1 justify-center">
+        <span className="text-[10px] text-slate-400 font-medium">{formattedDate}</span>
+        {onDelete && (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onDelete();
+            }}
+            className="p-1 rounded-full bg-white/90 text-slate-400 hover:text-red-500 hover:bg-white transition-colors md:opacity-0 md:group-hover:opacity-100 shadow-sm"
+            aria-label="删除歌曲"
+            title="删除歌曲"
+          >
+            <Trash2 size={12} />
+          </button>
+        )}
       </div>
     </div>
   );

@@ -8,9 +8,10 @@ interface AlbumDetailProps {
   songs: Song[];
   onBack: () => void;
   onArtistClick: (artist: string) => void;
+  onDeleteSong: (songId: string) => void;
 }
 
-export const AlbumDetail: React.FC<AlbumDetailProps> = ({ album, songs, onBack, onArtistClick }) => {
+export const AlbumDetail: React.FC<AlbumDetailProps> = ({ album, songs, onBack, onArtistClick, onDeleteSong }) => {
   const albumSongs = useMemo(() => {
     return songs
       .filter(s => s.album === album)
@@ -78,6 +79,7 @@ export const AlbumDetail: React.FC<AlbumDetailProps> = ({ album, songs, onBack, 
             key={song.id} 
             song={song} 
             onArtistClick={onArtistClick}
+            onDelete={() => onDeleteSong(song.id)}
             // No album click needed
           />
         ))}

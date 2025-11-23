@@ -60,6 +60,13 @@ const App: React.FC = () => {
   }, [songs, searchQuery]);
 
   // Handlers
+  const handleDeleteSong = (songId: string) => {
+    // 确认删除
+    if (window.confirm('确定要删除这首歌曲吗？')) {
+      setSongs(prevSongs => prevSongs.filter(song => song.id !== songId));
+    }
+  };
+
   const handleAddSong = async (title: string, artist: string, album: string) => {
     const metadata = await fetchSongMetadata(title, artist);
     
@@ -219,6 +226,7 @@ const App: React.FC = () => {
                     song={song} 
                     onArtistClick={navigateToArtistDetail}
                     onAlbumClick={navigateToAlbumDetail}
+                    onDelete={() => handleDeleteSong(song.id)}
                 />
               ))
             ) : (
@@ -260,6 +268,7 @@ const App: React.FC = () => {
                 songs={songs} 
                 onBack={navigateToHome}
                 onAlbumClick={navigateToAlbumDetail}
+                onDeleteSong={handleDeleteSong}
             />
         )}
 
@@ -270,6 +279,7 @@ const App: React.FC = () => {
                 songs={songs} 
                 onBack={navigateToHome}
                 onArtistClick={navigateToArtistDetail}
+                onDeleteSong={handleDeleteSong}
             />
         )}
 
