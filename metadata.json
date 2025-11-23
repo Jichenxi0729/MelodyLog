@@ -1,0 +1,5 @@
+{
+  "name": "MelodyLog",
+  "description": "现代化的蓝色主题音乐记录器，支持歌手和专辑探索、封面自动获取。",
+  "requestFramePermissions": []
+}
