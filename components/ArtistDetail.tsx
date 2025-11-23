@@ -8,9 +8,10 @@ interface ArtistDetailProps {
   songs: Song[];
   onBack: () => void;
   onAlbumClick: (album: string) => void;
+  onDeleteSong: (songId: string) => void;
 }
 
-export const ArtistDetail: React.FC<ArtistDetailProps> = ({ artist, songs, onBack, onAlbumClick }) => {
+export const ArtistDetail: React.FC<ArtistDetailProps> = ({ artist, songs, onBack, onAlbumClick, onDeleteSong }) => {
   const artistSongs = useMemo(() => {
     return songs
       .filter(s => s.artist === artist)
@@ -50,6 +51,7 @@ export const ArtistDetail: React.FC<ArtistDetailProps> = ({ artist, songs, onBac
             key={song.id} 
             song={song} 
             onAlbumClick={onAlbumClick}
+            onDelete={() => onDeleteSong(song.id)}
             // No artist click handler needed here as we are already on the artist page
           />
         ))}
