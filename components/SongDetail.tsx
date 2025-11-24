@@ -142,6 +142,36 @@ export const SongDetail: React.FC<SongDetailProps> = ({ songs, songId, onBack })
   const handleShare = () => {
     setShowShareModal(true);
   };
+  
+  // 实现海报下载功能
+  const handleDownloadPoster = () => {
+    // 使用html2canvas库的逻辑（需要用户安装这个库）
+    // 由于当前项目没有安装html2canvas，我们使用简化的下载方式
+    
+    // 创建一个链接来下载海报
+    const downloadLink = document.createElement('a');
+    
+    // 找到海报预览元素
+    const posterElement = document.querySelector('.aspect-\[3\/4\].w-full');
+    
+    if (posterElement) {
+      // 如果项目安装了html2canvas，可以使用下面的代码：
+      // html2canvas(posterElement).then(canvas => {
+      //   const dataUrl = canvas.toDataURL('image/png');
+      //   downloadLink.href = dataUrl;
+      //   downloadLink.download = `${song?.title}_poster.png`;
+      //   downloadLink.click();
+      // });
+      
+      // 简化版本：提示用户截图保存
+      alert('海报下载功能需要安装html2canvas库。请使用截图功能保存海报，或联系开发者安装必要的依赖。');
+    } else {
+      alert('无法找到海报元素，请稍后再试。');
+    }
+    
+    // 关闭模态框
+    setShowShareModal(false);
+  };
 
   const handleSaveLyrics = () => {
     if (selectedLyrics.length > 0 && songId) {
@@ -207,7 +237,7 @@ export const SongDetail: React.FC<SongDetailProps> = ({ songs, songId, onBack })
 
   if (!song) {
     return (
-      <div className="flex items-center justify-center h-screen bg-gray-100 text-gray-800">
+      <div className="flex items-center justify-center h-screen bg-brand-bg text-gray-800">
         <div className="text-center">
           <p className="text-xl mb-4">歌曲未找到</p>
           <button 
@@ -222,35 +252,35 @@ export const SongDetail: React.FC<SongDetailProps> = ({ songs, songId, onBack })
   }
 
   return (
-    <div className="min-h-screen bg-gray-100 text-gray-800">
-      {/* 顶部导航 */}
-      <header className="fixed top-0 left-0 right-0 z-10 bg-white/80 backdrop-blur-md p-4 shadow-sm">
-        <div className="flex items-center justify-between">
+    <div className="min-h-screen bg-brand-bg text-gray-800">
+
+      <main className="pt-0 pb-10 px-2 max-w-3xl mx-auto">
+        {/* 顶部操作栏 - 包含返回和分享按钮 */}
+        <div className="flex items-center justify-between px-1 -mt-1">
           <button 
             onClick={onBack} 
-            className="p-2 rounded-full hover:bg-gray-200 transition-colors"
+            className="p-1 rounded-full hover:bg-white/10 transition-colors text-white"
             aria-label="返回"
           >
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
             </svg>
           </button>
+          
           <button 
             onClick={handleShare} 
-            className="p-2 rounded-full hover:bg-gray-200 transition-colors"
+            className="p-1 rounded-full hover:bg-white/10 transition-colors text-white"
             aria-label="分享"
           >
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
             </svg>
           </button>
         </div>
-      </header>
-
-      <main className="pt-12 pb-16 px-4 max-w-4xl mx-auto">
+        
         {/* 歌曲信息卡片 */}
-        <section className="mb-6 bg-white rounded-xl p-4 shadow-md transform hover:shadow-lg transition-shadow duration-300">
-          <div className="flex flex-row items-center gap-4">
+        <section className="mb-6 bg-white rounded-xl p-3 shadow-md transform hover:shadow-lg transition-shadow duration-300 -mt-2">
+          <div className="flex flex-row items-center gap-3">
             <div className="relative">
               <div className="w-32 h-32 md:w-40 md:h-40 rounded-lg overflow-hidden shadow-md">
                 <img 
@@ -592,31 +622,40 @@ export const SongDetail: React.FC<SongDetailProps> = ({ songs, songId, onBack })
                   <div className="space-y-3">
                     <button 
                       onClick={() => {
-                        // 这里可以添加下载海报的功能
-                        alert('海报下载功能已准备就绪，可以保存到本地分享给朋友！');
-                        setShowShareModal(false);
+                        // 使用Web Share API实现直接分享功能
+                        if (navigator.share) {
+                          navigator.share({
+                            title: `分享歌曲: ${song?.title}`,
+                            text: selectedLyrics.length > 0 
+                              ? `${song?.title} - ${song?.artist}\n\n${selectedLyrics.join('\n')}`
+                              : `${song?.title} - ${song?.artist}`,
+                            url: window.location.href
+                          }).catch(err => {
+                            console.error('分享失败:', err);
+                            // 如果分享失败，回退到下载功能
+                            handleDownloadPoster();
+                          });
+                        } else {
+                          // 如果浏览器不支持分享API，回退到下载功能
+                          handleDownloadPoster();
+                        }
                       }}
                       className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors flex items-center justify-center gap-2"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
+                      </svg>
+                      直接分享
+                    </button>
+                    
+                    <button 
+                      onClick={handleDownloadPoster}
+                      className="w-full py-3 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg font-medium transition-colors flex items-center justify-center gap-2"
                     >
                       <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
                       </svg>
                       下载海报
-                    </button>
-                    
-                    <button 
-                      onClick={() => {
-                        // 复制分享链接
-                        navigator.clipboard.writeText(window.location.href)
-                          .then(() => alert('分享链接已复制到剪贴板！'))
-                          .catch(err => console.error('无法复制链接:', err));
-                      }}
-                      className="w-full py-3 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg font-medium transition-colors flex items-center justify-center gap-2"
-                    >
-                      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                      </svg>
-                      复制链接
                     </button>
                   </div>
                   

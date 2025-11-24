@@ -162,6 +162,7 @@ const App: React.FC = () => {
                             {view.type === 'ARTISTS' ? '歌手库' : ''}
                             {view.type === 'ARTIST_DETAIL' ? '歌手详情' : ''}
                             {view.type === 'ALBUM_DETAIL' ? '专辑详情' : ''}
+                            {view.type === 'SONG_DETAIL' ? '歌曲详细' : ''}
                          </span>
                     </div>
                 )}
