@@ -6,11 +6,12 @@ export interface Song {
   coverUrl?: string;
   releaseDate?: string; // ISO String or Year
   addedAt: number; // Timestamp
+  duration?: number; // Duration in seconds
 }
 
 export type SortOption = 'newest' | 'oldest' | 'artist';
 
-export type ViewType = 'HOME' | 'ARTISTS' | 'ARTIST_DETAIL' | 'ALBUM_DETAIL';
+export type ViewType = 'HOME' | 'ARTISTS' | 'ARTIST_DETAIL' | 'ALBUM_DETAIL' | 'SONG_DETAIL';
 
 export interface ViewState {
   type: ViewType;

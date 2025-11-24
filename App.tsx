@@ -7,6 +7,7 @@ import { ImportModal } from './components/ImportModal';
 import { ArtistLibrary } from './components/ArtistLibrary';
 import { ArtistDetail } from './components/ArtistDetail';
 import { AlbumDetail } from './components/AlbumDetail';
+import { SongDetail } from './components/SongDetail';
 import { fetchSongMetadata } from './services/musicService';
 import { exportSongsToCSV } from './utils/csvExporter';
 
@@ -128,6 +129,11 @@ const App: React.FC = () => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
+  const navigateToSongDetail = (songId: string) => {
+    setView({ type: 'SONG_DETAIL', data: songId });
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
   return (
     <div className="min-h-screen bg-brand-bg pb-24 md:pb-10 font-sans">
       
@@ -227,6 +233,7 @@ const App: React.FC = () => {
                     onArtistClick={navigateToArtistDetail}
                     onAlbumClick={navigateToAlbumDetail}
                     onDelete={() => handleDeleteSong(song.id)}
+                    onSongClick={navigateToSongDetail}
                 />
               ))
             ) : (
@@ -280,6 +287,15 @@ const App: React.FC = () => {
                 onBack={navigateToHome}
                 onArtistClick={navigateToArtistDetail}
                 onDeleteSong={handleDeleteSong}
+            />
+        )}
+
+        {/* VIEW: SONG DETAIL */}
+        {view.type === 'SONG_DETAIL' && view.data && (
+            <SongDetail 
+                songs={songs}
+                songId={view.data}
+                onBack={navigateToHome}
             />
         )}
 

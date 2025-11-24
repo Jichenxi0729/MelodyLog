@@ -11,11 +11,13 @@
     "deploy:setup": "npm install express dotenv"
   },
   "dependencies": {
-    "react": "^19.2.0",
-    "lucide-react": "^0.554.0",
-    "react-dom": "^19.2.0",
+    "@types/react-router-dom": "^5.3.3",
+    "dotenv": "^16.4.5",
     "express": "^4.19.2",
-    "dotenv": "^16.4.5"
+    "lucide-react": "^0.554.0",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "react-router-dom": "^7.9.6"
   },
   "devDependencies": {
     "@types/node": "^22.14.0",

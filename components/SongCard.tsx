@@ -7,9 +7,10 @@ interface SongCardProps {
   onArtistClick?: (artist: string) => void;
   onAlbumClick?: (album: string) => void;
   onDelete?: () => void;
+  onSongClick?: (songId: string) => void;
 }
 
-export const SongCard: React.FC<SongCardProps> = ({ song, onArtistClick, onAlbumClick, onDelete }) => {
+export const SongCard: React.FC<SongCardProps> = ({ song, onArtistClick, onAlbumClick, onDelete, onSongClick }) => {
   const formattedDate = new Date(song.addedAt).toLocaleDateString('zh-CN', {
     month: 'numeric',
     day: 'numeric',
@@ -29,8 +30,12 @@ export const SongCard: React.FC<SongCardProps> = ({ song, onArtistClick, onAlbum
     }
   };
 
+  const handleSongClick = () => {
+    onSongClick?.(song.id);
+  };
+
   return (
-    <div className="group relative bg-white rounded-lg shadow-sm hover:shadow-md transition-all duration-300 overflow-hidden border border-slate-100 h-[64px] flex items-center pr-3 md:pr-3 w-full">
+    <div onClick={handleSongClick} className="group relative bg-white rounded-lg shadow-sm hover:shadow-md transition-all duration-300 overflow-hidden border border-slate-100 h-[64px] flex items-center pr-2 md:pr-2 w-full cursor-pointer hover:bg-blue-50">
       {/* Cover Art - Smaller */}
       <div className="flex-shrink-0 w-[64px] h-[64px] relative">
         <img
@@ -43,7 +48,7 @@ export const SongCard: React.FC<SongCardProps> = ({ song, onArtistClick, onAlbum
       </div>
 
       {/* Info */}
-      <div className="flex-1 min-w-0 ml-3 flex flex-col justify-center h-full py-1.5 space-y-0.5">
+      <div className="flex-1 min-w-0 ml-2 flex flex-col justify-center h-full py-0.5 space-y-0.5">
         <div className="flex items-baseline justify-between">
           <h3 className="text-sm font-bold text-slate-800 truncate pr-2 md:pr-2" title={song.title}>
             {song.title}
