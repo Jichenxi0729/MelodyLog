@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import html2canvas from 'html2canvas';
 import { useNavigate } from 'react-router-dom';
 import { Song } from '../types';
 import { fetchLyrics } from '../services/lyricsService';
@@ -94,8 +95,8 @@ export const SongDetail: React.FC<SongDetailProps> = ({ songs, songId, onBack })
   const [loading, setLoading] = useState(true);
   const [selectedLyrics, setSelectedLyrics] = useState<string[]>([]);
   const [showShareModal, setShowShareModal] = useState(false);
-  const [showSavedLyrics, setShowSavedLyrics] = useState(true);
-  const [savedLyrics, setSavedLyrics] = useState<string[]>([]);
+  const [showSavedLyrics, setShowSavedLyrics] = useState(false);
+  const [savedLyrics, setSavedLyrics] = useState<string[][]>([]); // 改为二维数组，每个子数组代表一组歌词
   const [isLongPressing, setIsLongPressing] = useState<Record<string, boolean>>({});
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
   
@@ -129,10 +130,21 @@ export const SongDetail: React.FC<SongDetailProps> = ({ songs, songId, onBack })
         loadLyrics();
         
         // 加载保存的歌词
-        const saved = localStorage.getItem(`savedLyrics_${songId}`);
-        if (saved) {
-          setSavedLyrics(JSON.parse(saved));
-        }
+            const saved = localStorage.getItem(`savedLyrics_${songId}`);
+            if (saved) {
+              try {
+                const parsed = JSON.parse(saved);
+                // 兼容旧格式：如果是一维数组，转换为二维数组
+                if (Array.isArray(parsed) && parsed.length > 0 && typeof parsed[0] === 'string') {
+                  setSavedLyrics([parsed]);
+                } else if (Array.isArray(parsed)) {
+                  setSavedLyrics(parsed);
+                }
+              } catch (error) {
+                console.error('解析保存的歌词失败:', error);
+                localStorage.removeItem(`savedLyrics_${songId}`);
+              }
+            }
       }
     }
   }, [songId, songs]);
@@ -145,27 +157,35 @@ export const SongDetail: React.FC<SongDetailProps> = ({ songs, songId, onBack })
   
   // 实现海报下载功能
   const handleDownloadPoster = () => {
-    // 使用html2canvas库的逻辑（需要用户安装这个库）
-    // 由于当前项目没有安装html2canvas，我们使用简化的下载方式
-    
-    // 创建一个链接来下载海报
-    const downloadLink = document.createElement('a');
-    
     // 找到海报预览元素
-    const posterElement = document.querySelector('.aspect-\[3\/4\].w-full');
+    const posterElement = document.querySelector('.aspect-\[3\/4\].w-full') as HTMLElement;
     
     if (posterElement) {
-      // 如果项目安装了html2canvas，可以使用下面的代码：
-      // html2canvas(posterElement).then(canvas => {
-      //   const dataUrl = canvas.toDataURL('image/png');
-      //   downloadLink.href = dataUrl;
-      //   downloadLink.download = `${song?.title}_poster.png`;
-      //   downloadLink.click();
-      // });
-      
-      // 简化版本：提示用户截图保存
-      alert('海报下载功能需要安装html2canvas库。请使用截图功能保存海报，或联系开发者安装必要的依赖。');
+      // 使用html2canvas将海报元素转换为图片
+      html2canvas(posterElement, {
+        scale: 2, // 提高图片质量
+        useCORS: true, // 允许跨域图片
+        allowTaint: true,
+        backgroundColor: null
+      }).then(canvas => {
+        try {
+          const dataUrl = canvas.toDataURL('image/png');
+          const downloadLink = document.createElement('a');
+          downloadLink.href = dataUrl;
+          downloadLink.download = `${song?.title || 'song'}_poster.png`;
+          document.body.appendChild(downloadLink);
+          downloadLink.click();
+          document.body.removeChild(downloadLink);
+        } catch (error) {
+          console.error('下载海报失败:', error);
+          alert('下载海报时发生错误，请稍后再试。');
+        }
+      }).catch(error => {
+        console.error('生成海报图片失败:', error);
+        alert('生成海报图片时发生错误，请稍后再试。');
+      });
     } else {
+      console.error('未找到海报元素');
       alert('无法找到海报元素，请稍后再试。');
     }
     
@@ -175,10 +195,26 @@ export const SongDetail: React.FC<SongDetailProps> = ({ songs, songId, onBack })
 
   const handleSaveLyrics = () => {
     if (selectedLyrics.length > 0 && songId) {
-      // 过滤掉重复的歌词
-      const uniqueLyrics = selectedLyrics.filter(line => !savedLyrics.includes(line));
-      if (uniqueLyrics.length > 0) {
-        const updatedSavedLyrics = [...savedLyrics, ...uniqueLyrics];
+      // 检查当前选中的歌词组是否已经完全保存过
+      const isAlreadySaved = savedLyrics.some(savedGroup => 
+        savedGroup.length === selectedLyrics.length &&
+        selectedLyrics.every(line => savedGroup.includes(line))
+      );
+
+      if (isAlreadySaved) {
+        // 显示已保存过的提示
+        const notification = document.createElement('div');
+        notification.className = 'fixed top-4 right-4 bg-yellow-600 text-white px-4 py-2 rounded-lg shadow-lg z-50 animate-slide-in';
+        notification.textContent = '这个歌词组合已经保存过了';
+        document.body.appendChild(notification);
+        
+        setTimeout(() => {
+          notification.classList.add('animate-slide-out');
+          setTimeout(() => notification.remove(), 300);
+        }, 2000);
+      } else {
+        // 将当前选中的歌词组添加到已保存列表中
+        const updatedSavedLyrics = [...savedLyrics, [...selectedLyrics]];
         setSavedLyrics(updatedSavedLyrics);
         
         // 保存到本地存储
@@ -187,18 +223,7 @@ export const SongDetail: React.FC<SongDetailProps> = ({ songs, songId, onBack })
         // 显示成功提示
         const notification = document.createElement('div');
         notification.className = 'fixed top-4 right-4 bg-green-600 text-white px-4 py-2 rounded-lg shadow-lg z-50 animate-slide-in';
-        notification.textContent = `已保存 ${uniqueLyrics.length} 句歌词`;
-        document.body.appendChild(notification);
-        
-        setTimeout(() => {
-          notification.classList.add('animate-slide-out');
-          setTimeout(() => notification.remove(), 300);
-        }, 2000);
-      } else {
-        // 显示已保存过的提示
-        const notification = document.createElement('div');
-        notification.className = 'fixed top-4 right-4 bg-yellow-600 text-white px-4 py-2 rounded-lg shadow-lg z-50 animate-slide-in';
-        notification.textContent = '这些歌词已经保存过了';
+        notification.textContent = `已保存 1 组歌词`;
         document.body.appendChild(notification);
         
         setTimeout(() => {
@@ -211,8 +236,9 @@ export const SongDetail: React.FC<SongDetailProps> = ({ songs, songId, onBack })
     }
   };
   
-  const handleDeleteSavedLyric = (lyricToDelete: string) => {
-    const updatedSavedLyrics = savedLyrics.filter(line => line !== lyricToDelete);
+  // 处理删除整个歌词组
+  const handleDeleteSavedLyricGroup = (indexToDelete: number) => {
+    const updatedSavedLyrics = savedLyrics.filter((_, index) => index !== indexToDelete);
     setSavedLyrics(updatedSavedLyrics);
     
     // 更新本地存储
@@ -221,7 +247,26 @@ export const SongDetail: React.FC<SongDetailProps> = ({ songs, songId, onBack })
     // 显示删除成功提示
     const notification = document.createElement('div');
     notification.className = 'fixed top-4 right-4 bg-red-600 text-white px-4 py-2 rounded-lg shadow-lg z-50 animate-slide-in';
-    notification.textContent = '歌词已删除';
+    notification.textContent = '歌词组已删除';
+    document.body.appendChild(notification);
+    
+    setTimeout(() => {
+      notification.classList.add('animate-slide-out');
+      setTimeout(() => notification.remove(), 300);
+    }, 2000);
+  };
+
+  // 处理删除所有歌词
+  const handleDeleteAllLyrics = () => {
+    setSavedLyrics([]);
+    
+    // 更新本地存储
+    localStorage.setItem(`savedLyrics_${songId}`, JSON.stringify([]));
+    
+    // 显示删除成功提示
+    const notification = document.createElement('div');
+    notification.className = 'fixed top-4 right-4 bg-red-600 text-white px-4 py-2 rounded-lg shadow-lg z-50 animate-slide-in';
+    notification.textContent = '所有歌词已删除';
     document.body.appendChild(notification);
     
     setTimeout(() => {
@@ -319,7 +364,7 @@ export const SongDetail: React.FC<SongDetailProps> = ({ songs, songId, onBack })
               我喜欢的歌词
             </h2>
             <div className="flex items-center gap-4">
-              <span className="text-sm text-gray-500">{savedLyrics.length} 句</span>
+              <span className="text-sm text-gray-500">{savedLyrics.length} 组</span>
               <button 
                 onClick={() => setShowSavedLyrics(!showSavedLyrics)}
                 className="text-blue-600 hover:text-blue-700"
@@ -331,41 +376,33 @@ export const SongDetail: React.FC<SongDetailProps> = ({ songs, songId, onBack })
           {savedLyrics.length > 0 ? (
             showSavedLyrics && (
               <div className="space-y-4">
-                {savedLyrics.length <= 3 ? (
-                  // 合并2-3句喜欢的歌词为一句话并添加引号
-                  <div className="relative group">
-                    <p className="text-gray-700 bg-gray-50 p-4 rounded-xl transition-all duration-300 hover:shadow-md text-center italic">
-                「{savedLyrics.join('，')}。」
-              </p>
-                    <button 
-                      onClick={() => setSavedLyrics([])}
-                      className="absolute top-2 right-2 p-2 rounded-full bg-gray-100 text-gray-500 opacity-0 group-hover:opacity-100 transition-opacity hover:text-red-500"
-                      title="删除所有歌词"
-                    >
-                      <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                      </svg>
-                    </button>
-                  </div>
-                ) : (
-                  // 超过3句仍分开显示
-                  savedLyrics.map((line, index) => (
-                    <div key={index} className="relative group">
-                      <p className="text-gray-700 bg-gray-50 p-3 rounded-xl transition-all duration-300 hover:shadow-md">
-                        {line}
+                {/* 显示所有保存的歌词组 */}
+                <div className="space-y-4">
+                  {savedLyrics.map((lyricGroup, groupIndex) => (
+                    <div key={groupIndex} className="relative group">
+                      <p className="text-gray-700 bg-gray-50 p-4 rounded-xl transition-all duration-300 hover:shadow-md text-center italic">
+                        「{lyricGroup.join('，')}。」
                       </p>
                       <button 
-                        onClick={() => handleDeleteSavedLyric(line)}
+                        onClick={() => handleDeleteSavedLyricGroup(groupIndex)}
                         className="absolute top-2 right-2 p-2 rounded-full bg-gray-100 text-gray-500 opacity-0 group-hover:opacity-100 transition-opacity hover:text-red-500"
-                        title="删除歌词"
+                        title="删除这个歌词组"
                       >
                         <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                         </svg>
                       </button>
                     </div>
-                  ))
-                )}
+                  ))}
+                  {savedLyrics.length > 1 && (
+                    <button 
+                      onClick={handleDeleteAllLyrics}
+                      className="w-full mt-2 text-red-600 hover:text-red-700 text-center py-2 rounded-lg bg-red-50 hover:bg-red-100 transition-colors"
+                    >
+                      删除所有歌词组
+                    </button>
+                  )}
+                </div>
               </div>
             )
           ) : (
@@ -598,8 +635,13 @@ export const SongDetail: React.FC<SongDetailProps> = ({ songs, songId, onBack })
                             )}
                           </div>
                         ) : (
-                          <div className="text-gray-500 text-xs text-center py-2">
-                            分享这首好听的歌曲
+                          <div className="flex flex-col items-center">
+                            <div className="text-gray-500 text-xs text-center py-2">
+                              分享这首好听的歌曲
+                            </div>
+                            <div className="text-sm text-gray-500 truncate max-w-full">
+                              {song?.title} - {song?.artist}
+                            </div>
                           </div>
                         )}
                       </div>
@@ -622,25 +664,32 @@ export const SongDetail: React.FC<SongDetailProps> = ({ songs, songId, onBack })
                   <div className="space-y-3">
                     <button 
                       onClick={() => {
-                        // 使用Web Share API实现直接分享功能
-                        if (navigator.share) {
-                          navigator.share({
-                            title: `分享歌曲: ${song?.title}`,
-                            text: selectedLyrics.length > 0 
-                              ? `${song?.title} - ${song?.artist}\n\n${selectedLyrics.join('\n')}`
-                              : `${song?.title} - ${song?.artist}`,
-                            url: window.location.href
-                          }).catch(err => {
-                            console.error('分享失败:', err);
-                            // 如果分享失败，回退到下载功能
-                            handleDownloadPoster();
-                          });
-                        } else {
-                          // 如果浏览器不支持分享API，回退到下载功能
-                          handleDownloadPoster();
+                        try {
+                          console.log('直接分享按钮点击，song数据:', song);
+                          // 使用Web Share API实现直接分享功能
+                          if (navigator.share) {
+                            navigator.share({
+                              title: `分享歌曲: ${song?.title || '未知歌曲'}`,
+                              text: selectedLyrics.length > 0 
+                                ? `${song?.title || '未知歌曲'} - ${song?.artist || '未知歌手'}\n\n${selectedLyrics.join('\n')}`
+                                : `${song?.title || '未知歌曲'} - ${song?.artist || '未知歌手'}`,
+                              url: window.location.href
+                            }).catch(err => {
+                              console.error('Web Share API分享失败:', err);
+                              // 不自动回退到下载，让用户自己选择
+                              alert('分享失败，请尝试下载海报或复制链接。');
+                            });
+                          } else {
+                            console.log('浏览器不支持Web Share API');
+                            // 如果浏览器不支持分享API，提示用户
+                            alert('您的浏览器不支持直接分享功能，请尝试下载海报或复制链接。');
+                          }
+                        } catch (err) {
+                          console.error('分享功能执行错误:', err);
+                          alert('分享时发生错误，请稍后再试。');
                         }
                       }}
-                      className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors flex items-center justify-center gap-2"
+                      className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors flex items-center justify-center gap-2 cursor-pointer"
                     >
                       <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
@@ -650,7 +699,7 @@ export const SongDetail: React.FC<SongDetailProps> = ({ songs, songId, onBack })
                     
                     <button 
                       onClick={handleDownloadPoster}
-                      className="w-full py-3 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg font-medium transition-colors flex items-center justify-center gap-2"
+                      className="w-full py-3 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg font-medium transition-colors flex items-center justify-center gap-2 cursor-pointer"
                     >
                       <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
