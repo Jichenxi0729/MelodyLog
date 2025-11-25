@@ -84,9 +84,11 @@ interface SongDetailProps {
   songs: Song[];
   songId: string;
   onBack: () => void;
+  onArtistClick?: (artist: string) => void;
+  onAlbumClick?: (album: string) => void;
 }
 
-export const SongDetail: React.FC<SongDetailProps> = ({ songs, songId, onBack }) => {
+export const SongDetail: React.FC<SongDetailProps> = ({ songs, songId, onBack, onArtistClick, onAlbumClick }) => {
   // 使用props传入的songId而不是从URL参数获取
   const navigate = useNavigate();
   // 状态管理
@@ -119,7 +121,9 @@ export const SongDetail: React.FC<SongDetailProps> = ({ songs, songId, onBack })
         const loadLyrics = async () => {
           try {
             setLoading(true);
-            const lyricsData = await fetchLyrics(foundSong.title);
+            // 使用第一位歌手信息来匹配正确的歌词
+            const artist = foundSong.artists[0];
+            const lyricsData = await fetchLyrics(foundSong.title, artist);
             setLyrics(lyricsData);
           } catch (error) {
             console.error('Failed to load lyrics:', error);
@@ -299,22 +303,23 @@ export const SongDetail: React.FC<SongDetailProps> = ({ songs, songId, onBack })
   return (
     <div className="min-h-screen bg-brand-bg text-gray-800">
 
-      <main className="pt-0 pb-10 px-2 max-w-3xl mx-auto">
+      <main className="pt-0 pb-10 px-0.5 max-w-3xl mx-auto">
         {/* 顶部操作栏 - 包含返回和分享按钮 */}
-        <div className="flex items-center justify-between px-1 -mt-1">
+        <div className="flex items-center justify-between px-0 -mt-1 mb-2">
           <button 
             onClick={onBack} 
-            className="p-1 rounded-full hover:bg-white/10 transition-colors text-white"
+            className="p-2 rounded-full hover:bg-gray-100 transition-colors text-gray-600 flex items-center gap-1 text-sm font-medium"
             aria-label="返回"
           >
             <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
             </svg>
+            返回
           </button>
           
           <button 
             onClick={handleShare} 
-            className="p-1 rounded-full hover:bg-white/10 transition-colors text-white"
+            className="p-2 rounded-full hover:bg-gray-100 transition-colors text-gray-600"
             aria-label="分享"
           >
             <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -324,13 +329,13 @@ export const SongDetail: React.FC<SongDetailProps> = ({ songs, songId, onBack })
         </div>
         
         {/* 歌曲信息卡片 */}
-        <section className="mb-6 bg-white rounded-xl p-3 shadow-md transform hover:shadow-lg transition-shadow duration-300 -mt-2">
+        <section className="mb-4 bg-white rounded-xl p-3 shadow-sm transform hover:shadow transition-shadow duration-300">
           <div className="flex flex-row items-center gap-3">
             <div className="relative">
-              <div className="w-32 h-32 md:w-40 md:h-40 rounded-lg overflow-hidden shadow-md">
+              <div className="w-28 h-28 md:w-36 md:h-36 rounded-lg overflow-hidden shadow-md">
                 <img 
                   src={song.coverUrl || 'https://via.placeholder.com/200'} 
-                  alt={`${song.title} by ${song.artist}`}
+                  alt={`${song.title} by ${song.artists.join('/')}`}
                   className="w-full h-full object-cover"
                   loading="lazy"
                 />
@@ -338,8 +343,32 @@ export const SongDetail: React.FC<SongDetailProps> = ({ songs, songId, onBack })
             </div>
             <div className="text-left flex-1">
               <h1 className="text-xl md:text-2xl font-bold mb-1 text-gray-900 tracking-tight">{song.title}</h1>
-              <p className="text-lg text-blue-600 mb-2 font-medium">{song.artist}</p>
-              {song.album && <p className="text-sm text-gray-500 mb-1">专辑: <span className="text-gray-700">{song.album}</span></p>}
+              <div className="text-lg text-blue-600 mb-2 font-medium">
+                {song.artists.map((artist, index) => (
+                  <React.Fragment key={artist}>
+                    <span 
+                      onClick={() => onArtistClick?.(artist)}
+                      className="cursor-pointer hover:underline hover:text-blue-700"
+                      title={`查看 ${artist} 的详情`}
+                    >
+                      {artist}
+                    </span>
+                    {index < song.artists.length - 1 && <span className="text-blue-600">/</span>}
+                  </React.Fragment>
+                ))}
+              </div>
+              {song.album && (
+                <p className="text-sm text-gray-500 mb-1">
+                  专辑: 
+                  <span 
+                    onClick={() => onAlbumClick?.(song.album!)}
+                    className="text-gray-700 cursor-pointer hover:underline hover:text-gray-900"
+                    title={`查看专辑: ${song.album}`}
+                  >
+                    {song.album}
+                  </span>
+                </p>
+              )}
               {song.releaseDate && (
                 <p className="text-sm text-gray-500 mb-1">
                   发行日期: <span className="text-gray-700">{new Date(song.releaseDate).getFullYear()}</span>
@@ -355,9 +384,9 @@ export const SongDetail: React.FC<SongDetailProps> = ({ songs, songId, onBack })
         </section>
 
         {/* 收藏歌词区域 */}
-        <section className="bg-white rounded-xl p-3 shadow-sm mb-6">
+        <section className="bg-white rounded-xl p-3 shadow-sm mb-4">
           <div className="flex justify-between items-center mb-3">
-            <h2 className="text-xl font-semibold text-gray-800 flex items-center gap-2">
+            <h2 className="text-lg font-semibold text-gray-800 flex items-center gap-2">
               <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-pink-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
               </svg>
@@ -380,7 +409,7 @@ export const SongDetail: React.FC<SongDetailProps> = ({ songs, songId, onBack })
                 <div className="space-y-4">
                   {savedLyrics.map((lyricGroup, groupIndex) => (
                     <div key={groupIndex} className="relative group">
-                      <p className="text-gray-700 bg-gray-50 p-4 rounded-xl transition-all duration-300 hover:shadow-md text-center italic">
+                      <p className="text-gray-700 bg-gray-50 p-3 rounded-xl transition-all duration-300 hover:shadow-md text-center italic text-sm">
                         「{lyricGroup.join('，')}。」
                       </p>
                       <button 
@@ -419,16 +448,16 @@ export const SongDetail: React.FC<SongDetailProps> = ({ songs, songId, onBack })
         </section>
 
         {/* 歌词展示区域 */}
-        <section className="bg-white rounded-xl p-3 shadow-sm min-h-[300px] mb-16">
+        <section className="bg-white rounded-xl p-3 shadow-sm min-h-[300px] mb-4">
           <div className="flex justify-between items-center mb-3">
-            <h2 className="text-xl font-semibold text-gray-800 flex items-center gap-2">
+            <h2 className="text-lg font-semibold text-gray-800 flex items-center gap-2">
               <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2M9 19c0-1.105 1.343-2 3-2s3 .895 3 2M9 19v-3m0 3V5m0 14c0 1.105-1.343 2-3 2s-3-.895-3-2m3 0c0-1.105 1.343-2 3-2s3 .895 3 2m0 0v-3m0 3" />
               </svg>
               歌词
             </h2>
             <button 
-              onClick={() => song && fetchLyrics(song.title)}
+              onClick={() => song && fetchLyrics(song.title, song.artists[0])}
               disabled={loading}
               className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-full transition-colors font-medium text-sm flex items-center gap-2"
             >
@@ -614,7 +643,7 @@ export const SongDetail: React.FC<SongDetailProps> = ({ songs, songId, onBack })
                        
                       {/* 歌曲信息 - 调整字体大小 */}
                       <div className="text-gray-900 text-base font-medium mb-0.5 text-center truncate">{song?.title}</div>
-                      <div className="text-gray-600 text-xs mb-0.5 text-center truncate">{song?.artist}</div>
+                      <div className="text-gray-600 text-xs mb-0.5 text-center truncate">{song?.artists?.join('/')}</div>
                       {song?.album && <div className="text-gray-500 text-xs mb-2 text-center truncate">{song?.album}</div>}
                       
                       {/* 歌词卡片 */}
@@ -640,7 +669,7 @@ export const SongDetail: React.FC<SongDetailProps> = ({ songs, songId, onBack })
                               分享这首好听的歌曲
                             </div>
                             <div className="text-sm text-gray-500 truncate max-w-full">
-                              {song?.title} - {song?.artist}
+                              {song?.title} - {song?.artists?.join('/')}
                             </div>
                           </div>
                         )}
@@ -671,8 +700,8 @@ export const SongDetail: React.FC<SongDetailProps> = ({ songs, songId, onBack })
                             navigator.share({
                               title: `分享歌曲: ${song?.title || '未知歌曲'}`,
                               text: selectedLyrics.length > 0 
-                                ? `${song?.title || '未知歌曲'} - ${song?.artist || '未知歌手'}\n\n${selectedLyrics.join('\n')}`
-                                : `${song?.title || '未知歌曲'} - ${song?.artist || '未知歌手'}`,
+                                ? `${song?.title || '未知歌曲'} - ${song?.artists?.join('/') || '未知歌手'}\n\n${selectedLyrics.join('\n')}`
+                                : `${song?.title || '未知歌曲'} - ${song?.artists?.join('/') || '未知歌手'}`,
                               url: window.location.href
                             }).catch(err => {
                               console.error('Web Share API分享失败:', err);

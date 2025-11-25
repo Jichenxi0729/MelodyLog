@@ -21,6 +21,7 @@ const App: React.FC = () => {
   
   // Navigation State
   const [view, setView] = useState<ViewState>({ type: 'HOME' });
+  const [navigationHistory, setNavigationHistory] = useState<ViewState[]>([{ type: 'HOME' }]);
   
   // Modals
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -51,7 +52,7 @@ const App: React.FC = () => {
       const q = searchQuery.toLowerCase();
       result = result.filter(s => 
         s.title.toLowerCase().includes(q) || 
-        s.artist.toLowerCase().includes(q) ||
+        s.artists.some(artist => artist.toLowerCase().includes(q)) ||
         (s.album && s.album.toLowerCase().includes(q))
       );
     }
@@ -69,12 +70,15 @@ const App: React.FC = () => {
   };
 
   const handleAddSong = async (title: string, artist: string, album: string) => {
-    const metadata = await fetchSongMetadata(title, artist);
+    // 将歌手字符串分割为数组，支持逗号、顿号、斜杠分隔
+    const artists = artist.split(/[,，、\/]/).map(a => a.trim()).filter(a => a.length > 0);
+    
+    const metadata = await fetchSongMetadata(title, artists.join(' '));
     
     const newSong: Song = {
       id: crypto.randomUUID(),
       title,
-      artist,
+      artists,
       album: album || metadata.album,
       coverUrl: metadata.coverUrl,
       releaseDate: metadata.releaseDate,
@@ -92,12 +96,14 @@ const App: React.FC = () => {
       if (parts.length >= 2) {
         const title = parts[0];
         const artist = parts[1];
-        const metadata = await fetchSongMetadata(title, artist);
+        // 将歌手字符串分割为数组，支持逗号、顿号、斜杠分隔
+        const artists = artist.split(/[,，、\/]/).map(a => a.trim()).filter(a => a.length > 0);
+        const metadata = await fetchSongMetadata(title, artists.join(' '));
         
         newSongs.push({
           id: crypto.randomUUID(),
           title,
-          artist,
+          artists,
           coverUrl: metadata.coverUrl,
           releaseDate: metadata.releaseDate,
           album: metadata.album,
@@ -110,28 +116,51 @@ const App: React.FC = () => {
   };
 
   // Navigation Handlers
+  const navigateTo = (newView: ViewState) => {
+    setNavigationHistory(prev => [...prev, newView]);
+    setView(newView);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const navigateBack = () => {
+    if (navigationHistory.length > 1) {
+      // 移除当前页面，回到上一页
+      const newHistory = navigationHistory.slice(0, -1);
+      const previousView = newHistory[newHistory.length - 1];
+      
+      setNavigationHistory(newHistory);
+      setView(previousView);
+      
+      // 如果是回到首页，清空搜索
+      if (previousView.type === 'HOME') {
+        setSearchQuery('');
+      }
+    } else {
+      // 如果历史栈只有首页，则保持在当前页面
+      setView({ type: 'HOME' });
+      setSearchQuery('');
+    }
+  };
+
   const navigateToHome = () => {
-    setView({ type: 'HOME' });
+    navigateTo({ type: 'HOME' });
     setSearchQuery('');
   };
 
   const navigateToArtists = () => {
-    setView({ type: 'ARTISTS' });
+    navigateTo({ type: 'ARTISTS' });
   };
 
   const navigateToArtistDetail = (artist: string) => {
-    setView({ type: 'ARTIST_DETAIL', data: artist });
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    navigateTo({ type: 'ARTIST_DETAIL', data: artist });
   };
 
   const navigateToAlbumDetail = (album: string) => {
-    setView({ type: 'ALBUM_DETAIL', data: album });
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    navigateTo({ type: 'ALBUM_DETAIL', data: album });
   };
 
   const navigateToSongDetail = (songId: string) => {
-    setView({ type: 'SONG_DETAIL', data: songId });
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    navigateTo({ type: 'SONG_DETAIL', data: songId });
   };
 
   return (
@@ -274,9 +303,10 @@ const App: React.FC = () => {
             <ArtistDetail 
                 artist={view.data} 
                 songs={songs} 
-                onBack={navigateToHome}
+                onBack={navigateBack}
                 onAlbumClick={navigateToAlbumDetail}
                 onDeleteSong={handleDeleteSong}
+                onSongClick={navigateToSongDetail}
             />
         )}
 
@@ -285,9 +315,10 @@ const App: React.FC = () => {
             <AlbumDetail 
                 album={view.data} 
                 songs={songs} 
-                onBack={navigateToHome}
+                onBack={navigateBack}
                 onArtistClick={navigateToArtistDetail}
                 onDeleteSong={handleDeleteSong}
+                onSongClick={navigateToSongDetail}
             />
         )}
 
@@ -296,7 +327,9 @@ const App: React.FC = () => {
             <SongDetail 
                 songs={songs}
                 songId={view.data}
-                onBack={navigateToHome}
+                onBack={navigateBack}
+                onArtistClick={navigateToArtistDetail}
+                onAlbumClick={navigateToAlbumDetail}
             />
         )}
 

@@ -18,9 +18,9 @@ export const SongCard: React.FC<SongCardProps> = ({ song, onArtistClick, onAlbum
 
   const releaseYear = song.releaseDate ? new Date(song.releaseDate).getFullYear() : null;
 
-  const handleArtistClick = (e: React.MouseEvent) => {
+  const handleArtistClick = (e: React.MouseEvent, artist: string) => {
     e.stopPropagation();
-    onArtistClick?.(song.artist);
+    onArtistClick?.(artist);
   };
 
   const handleAlbumClick = (e: React.MouseEvent) => {
@@ -55,14 +55,21 @@ export const SongCard: React.FC<SongCardProps> = ({ song, onArtistClick, onAlbum
           </h3>
         </div>
         
-        {/* Artist - Clickable */}
-        <div 
-          onClick={handleArtistClick}
-          className="flex items-center gap-1 text-xs text-brand-light font-medium truncate cursor-pointer hover:underline hover:text-blue-600 w-fit"
-          title={`查看 ${song.artist} 的详情`}
-        >
+        {/* Artists - Clickable */}
+        <div className="flex items-center gap-1 text-xs text-brand-light font-medium truncate w-fit">
           <User size={10} />
-          {song.artist}
+          {song.artists.map((artist, index) => (
+            <React.Fragment key={artist}>
+              <span 
+                onClick={(e) => handleArtistClick(e, artist)}
+                className="cursor-pointer hover:underline hover:text-blue-600"
+                title={`查看 ${artist} 的详情`}
+              >
+                {artist}
+              </span>
+              {index < song.artists.length - 1 && <span className="text-slate-400">/</span>}
+            </React.Fragment>
+          ))}
         </div>
 
         {/* Metadata Row */}

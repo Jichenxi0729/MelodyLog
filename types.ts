@@ -1,7 +1,7 @@
 export interface Song {
   id: string;
   title: string;
-  artist: string;
+  artists: string[]; // 支持多位歌手
   album?: string;
   coverUrl?: string;
   releaseDate?: string; // ISO String or Year

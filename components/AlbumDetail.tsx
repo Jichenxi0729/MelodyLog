@@ -9,9 +9,10 @@ interface AlbumDetailProps {
   onBack: () => void;
   onArtistClick: (artist: string) => void;
   onDeleteSong: (songId: string) => void;
+  onSongClick?: (songId: string) => void;
 }
 
-export const AlbumDetail: React.FC<AlbumDetailProps> = ({ album, songs, onBack, onArtistClick, onDeleteSong }) => {
+export const AlbumDetail: React.FC<AlbumDetailProps> = ({ album, songs, onBack, onArtistClick, onDeleteSong, onSongClick }) => {
   const albumSongs = useMemo(() => {
     return songs
       .filter(s => s.album === album)
@@ -19,7 +20,7 @@ export const AlbumDetail: React.FC<AlbumDetailProps> = ({ album, songs, onBack, 
   }, [songs, album]);
 
   // Use metadata from the first found song of this album
-  const metadata = albumSongs[0] || {};
+  const metadata = albumSongs[0] || { artists: [], releaseDate: null, coverUrl: '', id: '' };
   const releaseYear = metadata.releaseDate ? new Date(metadata.releaseDate).getFullYear() : null;
 
   return (
@@ -47,14 +48,21 @@ export const AlbumDetail: React.FC<AlbumDetailProps> = ({ album, songs, onBack, 
             <h1 className="text-2xl md:text-4xl font-bold text-slate-900 mt-2 mb-2 leading-tight">{album}</h1>
             
             <div className="space-y-2">
-                <div 
-                    onClick={() => onArtistClick(metadata.artist)}
-                    className="text-lg text-slate-600 font-medium hover:text-brand-light cursor-pointer transition-colors flex items-center gap-2"
-                >
+                <div className="text-lg text-slate-600 font-medium flex items-center gap-2">
                     <span className="w-6 h-6 rounded-full bg-slate-100 flex items-center justify-center text-slate-500">
                         <User size={14} /> 
                     </span>
-                    {metadata.artist}
+                    <div className="flex flex-wrap gap-1">
+                        {metadata.artists.map((artist, index) => (
+                            <span
+                                key={index}
+                                onClick={() => onArtistClick(artist)}
+                                className="hover:text-brand-light cursor-pointer transition-colors"
+                            >
+                                {artist}{index < metadata.artists.length - 1 ? '/' : ''}
+                            </span>
+                        ))}
+                    </div>
                 </div>
                 
                 <div className="flex items-center gap-4 text-sm text-slate-500 mt-4">
@@ -80,6 +88,7 @@ export const AlbumDetail: React.FC<AlbumDetailProps> = ({ album, songs, onBack, 
             song={song} 
             onArtistClick={onArtistClick}
             onDelete={() => onDeleteSong(song.id)}
+            onSongClick={onSongClick}
             // No album click needed
           />
         ))}

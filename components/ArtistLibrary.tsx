@@ -11,8 +11,10 @@ export const ArtistLibrary: React.FC<ArtistLibraryProps> = ({ songs, onSelectArt
   const artistsData = useMemo(() => {
     const map = new Map<string, number>();
     songs.forEach(song => {
-      const count = map.get(song.artist) || 0;
-      map.set(song.artist, count + 1);
+      song.artists.forEach(artist => {
+        const count = map.get(artist) || 0;
+        map.set(artist, count + 1);
+      });
     });
     
     return Array.from(map.entries())

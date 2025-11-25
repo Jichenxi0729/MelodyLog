@@ -9,12 +9,13 @@ interface ArtistDetailProps {
   onBack: () => void;
   onAlbumClick: (album: string) => void;
   onDeleteSong: (songId: string) => void;
+  onSongClick?: (songId: string) => void;
 }
 
-export const ArtistDetail: React.FC<ArtistDetailProps> = ({ artist, songs, onBack, onAlbumClick, onDeleteSong }) => {
+export const ArtistDetail: React.FC<ArtistDetailProps> = ({ artist, songs, onBack, onAlbumClick, onDeleteSong, onSongClick }) => {
   const artistSongs = useMemo(() => {
     return songs
-      .filter(s => s.artist === artist)
+      .filter(s => s.artists.includes(artist))
       .sort((a, b) => b.addedAt - a.addedAt);
   }, [songs, artist]);
 
@@ -52,6 +53,7 @@ export const ArtistDetail: React.FC<ArtistDetailProps> = ({ artist, songs, onBac
             song={song} 
             onAlbumClick={onAlbumClick}
             onDelete={() => onDeleteSong(song.id)}
+            onSongClick={onSongClick}
             // No artist click handler needed here as we are already on the artist page
           />
         ))}

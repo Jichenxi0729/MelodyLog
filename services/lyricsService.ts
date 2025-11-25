@@ -59,8 +59,8 @@ const saveLyricsToCache = (key: string, type: 'lyrics' | 'lyricsWithTime', data:
 };
 
 // 歌词API服务
-export const fetchLyrics = async (songTitle: string): Promise<string[]> => {
-  const cacheKey = songTitle.trim().toLowerCase();
+export const fetchLyrics = async (songTitle: string, artist?: string): Promise<string[]> => {
+  const cacheKey = `${songTitle.trim().toLowerCase()}_${artist || ''}`;
   
   // 检查缓存
   const cachedData = getLyricsFromCache(cacheKey, 'lyrics');
@@ -70,45 +70,84 @@ export const fetchLyrics = async (songTitle: string): Promise<string[]> => {
   
   try {
     // 调用用户提供的歌词API
-    console.log(`[API] 获取歌词: ${songTitle}`);
-    const response = await fetch(`https://www.hhlqilongzhu.cn/api/dg_geci.php?msg=${encodeURIComponent(songTitle)}&type=1&n=1`);
+    console.log(`[API] 获取歌词: ${songTitle}${artist ? ` - ${artist}` : ''}`);
     
-    if (!response.ok) {
-      throw new Error('Failed to fetch lyrics');
+    // 首先尝试获取歌曲列表，根据歌手名字选择正确的歌曲序号
+    const songListResponse = await fetch(`https://www.hhlqilongzhu.cn/api/dg_geci.php?msg=${encodeURIComponent(songTitle)}&type=1`);
+    
+    if (!songListResponse.ok) {
+      throw new Error('Failed to fetch song list');
     }
     
-    const data = await response.text();
-    
-    // 解析歌词数据
-    // 根据API返回格式，歌词可能是分段的，我们需要处理一下
-    // 示例返回可能是这样的："歌词行1\n歌词行2\n歌词行3"
-    // 或者可能有特殊格式，需要进一步处理
-    
-    // 简单的处理方式：按换行符分割
-    const lines = data.split('\n')
+    const songListData = await songListResponse.text();
+    const songListLines = songListData.split('\n')
       .map(line => line.trim())
       .filter(line => line.length > 0 && !line.startsWith('LRC'));
     
-    // 如果返回的是歌曲列表而不是歌词（当n参数为空时），则返回空数组
-    // 可以通过检查第一行是否包含特定模式来判断
-    if (lines.length > 0 && /^\d+\./.test(lines[0])) {
-      console.log('Received song list instead of lyrics');
-      // 返回一些模拟歌词
-      const result = [
-        '这里是模拟歌词',
-        '因为歌词API返回了歌曲列表',
-        '请尝试更具体的歌曲名称',
-        '或者提供正确的歌曲序号'
-      ];
-      // 缓存模拟歌词
+    // 检查是否返回了歌曲列表
+    if (songListLines.length > 0 && /^\d+\./.test(songListLines[0])) {
+      console.log('Received song list, searching for matching artist...');
+      
+      let selectedSongIndex = 1; // 默认选择第一首
+      
+      // 如果有歌手信息，尝试匹配正确的歌曲序号
+      if (artist) {
+        const artistLower = artist.toLowerCase();
+        for (let i = 0; i < songListLines.length; i++) {
+          const line = songListLines[i];
+          // 检查行中是否包含歌手名字
+          if (line.toLowerCase().includes(artistLower)) {
+            // 提取序号
+            const match = line.match(/^(\d+)\./);
+            if (match) {
+              selectedSongIndex = parseInt(match[1]);
+              console.log(`Found matching artist, selected song index: ${selectedSongIndex}`);
+              break;
+            }
+          }
+        }
+      }
+      
+      // 使用选定的歌曲序号获取歌词
+      const lyricsResponse = await fetch(`https://www.hhlqilongzhu.cn/api/dg_geci.php?msg=${encodeURIComponent(songTitle)}&type=1&n=${selectedSongIndex}`);
+      
+      if (!lyricsResponse.ok) {
+        throw new Error('Failed to fetch lyrics with selected index');
+      }
+      
+      const lyricsData = await lyricsResponse.text();
+      
+      // 解析歌词数据
+      const lines = lyricsData.split('\n')
+        .map(line => line.trim())
+        .filter(line => line.length > 0 && !line.startsWith('LRC'));
+      
+      // 如果返回的仍然是歌曲列表，则返回模拟歌词
+      if (lines.length > 0 && /^\d+\./.test(lines[0])) {
+        console.log('Still received song list after index selection');
+        const result = [
+          '这里是模拟歌词',
+          '因为歌词API返回了歌曲列表',
+          '请尝试更具体的歌曲名称',
+          '或者提供正确的歌曲序号'
+        ];
+        saveLyricsToCache(cacheKey, 'lyrics', result);
+        return result;
+      }
+      
+      const result = lines.length > 0 ? lines : ['暂无歌词'];
+      saveLyricsToCache(cacheKey, 'lyrics', result);
+      return result;
+    } else {
+      // 直接返回歌词数据
+      const lines = songListData.split('\n')
+        .map(line => line.trim())
+        .filter(line => line.length > 0 && !line.startsWith('LRC'));
+      
+      const result = lines.length > 0 ? lines : ['暂无歌词'];
       saveLyricsToCache(cacheKey, 'lyrics', result);
       return result;
     }
-    
-    const result = lines.length > 0 ? lines : ['暂无歌词'];
-    // 缓存结果
-    saveLyricsToCache(cacheKey, 'lyrics', result);
-    return result;
   } catch (error) {
     console.error('Error fetching lyrics:', error);
     // 返回一些默认的歌词内容作为备用

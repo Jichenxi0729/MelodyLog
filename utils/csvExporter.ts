@@ -23,7 +23,7 @@ export const exportSongsToCSV = (songs: Song[]): void => {
       const values = [
         (index + 1).toString(), // 序号
         escapeCSV(song.title), // 歌名
-        escapeCSV(song.artist), // 歌手
+        escapeCSV(song.artists.join('/')), // 歌手
         escapeCSV(song.album || ''), // 专辑
         year // 年份
       ];
