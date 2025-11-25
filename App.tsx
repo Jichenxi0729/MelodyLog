@@ -385,7 +385,8 @@ const App: React.FC = () => {
       <AddSongModal 
         isOpen={isAddModalOpen} 
         onClose={() => setIsAddModalOpen(false)} 
-        onAdd={handleAddSong} 
+        onAdd={handleAddSong}
+        songs={songs}
       />
       <ImportModal 
         isOpen={isImportModalOpen} 
