@@ -35,7 +35,7 @@ export const SongCard: React.FC<SongCardProps> = ({ song, onArtistClick, onAlbum
   };
 
   return (
-    <div onClick={handleSongClick} className="group relative bg-white rounded-lg shadow-sm hover:shadow-md transition-all duration-300 overflow-hidden border border-slate-100 h-[64px] flex items-center pr-2 md:pr-2 w-full cursor-pointer hover:bg-blue-50">
+    <div onClick={handleSongClick} className="group relative bg-blue-50/20 rounded-lg shadow-sm hover:shadow-lg transition-all duration-300 overflow-hidden border border-slate-200 h-[64px] flex items-center pr-2 md:pr-2 w-full cursor-pointer hover:bg-blue-100">
       {/* Cover Art - Smaller */}
       <div className="flex-shrink-0 w-[64px] h-[64px] relative">
         <img

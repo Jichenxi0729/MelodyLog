@@ -302,7 +302,7 @@ export const SongDetail: React.FC<SongDetailProps> = ({ songs, songId, onBack, o
   }
 
   return (
-    <div className="min-h-screen bg-brand-bg text-gray-800">
+    <div className="min-h-screen bg-white text-gray-800">
 
       <main className="pt-2 pb-10 px-0.5 max-w-3xl mx-auto">
         {/* 返回按钮和分享按钮 */}
@@ -322,7 +322,7 @@ export const SongDetail: React.FC<SongDetailProps> = ({ songs, songId, onBack, o
         </div>
 
         {/* 歌曲信息卡片 */}
-        <section className="mb-4 bg-white rounded-xl p-3 shadow-sm transform hover:shadow transition-shadow duration-300">
+        <section className="mb-4 bg-blue-50/20 rounded-xl p-3 shadow-md transform hover:shadow-lg transition-shadow duration-300">
           <div className="flex flex-row items-center gap-3">
             <div className="relative">
               <div className="w-28 h-28 md:w-36 md:h-36 rounded-lg overflow-hidden shadow-md">
@@ -377,7 +377,7 @@ export const SongDetail: React.FC<SongDetailProps> = ({ songs, songId, onBack, o
         </section>
 
         {/* 收藏歌词区域 */}
-        <section className="bg-white rounded-xl p-3 shadow-sm mb-4">
+        <section className="bg-blue-50/20 rounded-xl p-3 shadow-md mb-4">
           <div className="flex justify-between items-center mb-3">
             <h2 className="text-base font-semibold text-gray-800 flex items-center gap-2">
               <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-pink-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -441,7 +441,7 @@ export const SongDetail: React.FC<SongDetailProps> = ({ songs, songId, onBack, o
         </section>
 
         {/* 歌词展示区域 */}
-        <section className="bg-white rounded-xl p-3 shadow-sm min-h-[300px] mb-4">
+        <section className="bg-blue-50/20 rounded-xl p-3 shadow-md min-h-[300px] mb-4">
           <div className="flex justify-between items-center mb-3">
             <h2 className="text-base font-semibold text-gray-800 flex items-center gap-2">
               <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">

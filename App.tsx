@@ -274,26 +274,63 @@ const App: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-brand-bg font-sans">
-      
-      {/* Main Content - Adjusted padding to make space for bottom navigation */}
-      <main className="max-w-3xl mx-auto px-4 pt-4 pb-24">
-        
-        {/* Search Bar for Home Page */}
-        {view.type === 'HOME' && (
-          <div className="mb-6">
-            <div className="relative max-w-lg mx-auto group">
-              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                <Search className="h-4 w-4 text-slate-500 group-focus-within:text-slate-700 transition-colors" />
+    <div className="min-h-screen bg-white text-slate-800">
+      {/* Header - Only show on HOME page */}
+      {view.type === 'HOME' && (
+        <header className="sticky top-0 z-50 bg-white border-b border-slate-100 shadow-sm">
+          <div className="max-w-3xl mx-auto px-4 py-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Music2 className="text-brand-light" size={24} />
+                <h1 className="text-xl font-bold text-slate-800">音想</h1>
               </div>
-              <input
-                type="text"
-                className="block w-full pl-9 pr-3 py-2 rounded-full bg-slate-100 border border-slate-200 text-slate-800 placeholder-slate-500 focus:bg-white focus:ring-1 focus:ring-slate-300 focus:outline-none transition-all text-sm"
-                placeholder="搜索音乐..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-              />
+              
+              {/* Search Bar */}
+              <div className="relative flex-1 max-w-md mx-4">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400" size={18} />
+                <input
+                  type="text"
+                  placeholder="搜索歌曲、歌手或专辑..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-light focus:border-brand-light outline-none text-sm"
+                />
+              </div>
+              
+              {/* Desktop Import/Export */}
+              <div className="hidden md:flex items-center gap-2">
+                <button
+                  onClick={() => setIsImportModalOpen(true)}
+                  className="text-slate-600 hover:text-brand-light transition-colors text-sm font-medium flex items-center gap-1"
+                >
+                  <UploadCloud size={16} />
+                  <span>导入</span>
+                </button>
+                <button
+                  onClick={() => exportSongsToCSV(songs)}
+                  className="text-slate-600 hover:text-brand-light transition-colors text-sm font-medium flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed"
+                  disabled={songs.length === 0}
+                >
+                  <Download size={16} />
+                  <span>导出</span>
+                </button>
+              </div>
             </div>
+          </div>
+        </header>
+      )}
+
+      {/* Main Content */}
+      <main className="max-w-3xl mx-auto px-4 pb-24 pt-4">
+        {/* Breadcrumb - Only show for ARTISTS page (ArtistLibrary doesn't have back button) */}
+        {navigationHistory.length > 1 && view.type === 'ARTISTS' && (
+          <div className="mb-4">
+            <button
+              onClick={navigateBack}
+              className="text-sm text-slate-500 hover:text-brand-light transition-colors flex items-center gap-1"
+            >
+              ← 返回
+            </button>
           </div>
         )}
         
@@ -321,7 +358,7 @@ const App: React.FC = () => {
               ))
             ) : (
               <div className="text-center py-20 px-6">
-                <div className="bg-white inline-flex p-4 rounded-full shadow-sm mb-4">
+                <div className="bg-slate-50 inline-flex p-4 rounded-full shadow-sm mb-4">
                   <Music2 className="text-slate-300" size={40} />
                 </div>
                 <h3 className="text-slate-800 font-semibold text-lg mb-1">没有找到音乐</h3>
@@ -388,41 +425,41 @@ const App: React.FC = () => {
 
       </main>
 
-      {/* Bottom Navigation Bar */}
-      <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 z-50 shadow-lg">
-        <div className="max-w-3xl mx-auto px-4 py-2">
+      {/* Bottom Navigation Bar - Smaller size */}
+      <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-100 z-50 shadow-lg">
+        <div className="max-w-3xl mx-auto px-4 py-1">
           <div className="flex justify-around items-center">
             {/* Home Button */}
             <button
               onClick={navigateToHome}
-              className={`flex flex-col items-center justify-center w-14 h-14 rounded-xl transition-all duration-200 ${
+              className={`flex flex-col items-center justify-center w-12 h-12 rounded-xl transition-all duration-200 ${
                 view.type === 'HOME' 
                   ? 'bg-brand-light/10 text-brand-light' 
                   : 'text-slate-500 hover:text-brand-light hover:bg-slate-50'
               }`}
             >
-              <Home size={20} className="mb-0.5" />
+              <Home size={18} className="mb-0.5" />
               <span className="text-xs font-medium">首页</span>
             </button>
 
-            {/* Add Button - No text, thicker plus icon */}
+            {/* Add Button - Smaller */}
             <button
               onClick={() => setIsAddModalOpen(true)}
-              className="flex items-center justify-center w-12 h-12 rounded-xl bg-gradient-to-r from-brand-light to-blue-500 text-white shadow-lg hover:shadow-xl transition-all duration-200"
+              className="flex items-center justify-center w-10 h-10 rounded-xl bg-gradient-to-r from-brand-light to-blue-500 text-white shadow-lg hover:shadow-xl transition-all duration-200"
             >
-              <Plus size={24} strokeWidth={3} />
+              <Plus size={20} strokeWidth={3} />
             </button>
 
             {/* Artists Button */}
             <button
               onClick={navigateToArtists}
-              className={`flex flex-col items-center justify-center w-14 h-14 rounded-xl transition-all duration-200 ${
+              className={`flex flex-col items-center justify-center w-12 h-12 rounded-xl transition-all duration-200 ${
                 view.type === 'ARTISTS' 
                   ? 'bg-brand-light/10 text-brand-light' 
                   : 'text-slate-500 hover:text-brand-light hover:bg-slate-50'
               }`}
             >
-              <Users size={20} className="mb-0.5" />
+              <Users size={18} className="mb-0.5" />
               <span className="text-xs font-medium">歌手库</span>
             </button>
           </div>
@@ -432,12 +469,6 @@ const App: React.FC = () => {
       {/* Desktop Action Buttons - Hide on mobile */}
       <div className="hidden md:flex fixed bottom-6 right-6 z-40 gap-2">
         <button 
-          onClick={() => setIsAddModalOpen(true)}
-          className="bg-brand-light hover:bg-blue-400 text-white px-4 py-2 rounded-full text-sm font-medium shadow-lg shadow-blue-900/20 transition-all flex items-center gap-1"
-        >
-          <Plus size={16} /> 添加
-        </button>
-        <button
           onClick={() => setIsImportModalOpen(true)}
           className="bg-white text-slate-700 p-2 rounded-full shadow-lg border border-slate-200 hover:bg-slate-50 transition-colors"
           aria-label="导入"
@@ -491,6 +522,3 @@ const App: React.FC = () => {
 };
 
 export default App;
-
-
-

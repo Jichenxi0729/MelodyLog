@@ -17,6 +17,7 @@ interface SearchResult {
   album: string;
   duration: number;
   coverUrl?: string;
+  releaseDate?: string; // 添加发行日期字段
 }
 
 export const AddSongModal: React.FC<AddSongModalProps> = ({ isOpen, onClose, onAdd, songs }) => {
@@ -141,53 +142,62 @@ export const AddSongModal: React.FC<AddSongModalProps> = ({ isOpen, onClose, onA
 
     setIsLoading(true);
     
-    // 智能匹配歌曲信息：先尝试国内版，如果没有完全匹配就使用国际版第一首歌
+    // 如果用户通过搜索选择了具体的歌曲，直接使用选择的歌曲信息
     let coverUrl = '';
     let matchedAlbum = album;
     let releaseDate: string | undefined = undefined;
     
-    try {
-      // 先尝试国内版搜索
-      const domesticResults = await musicApi.search({
-        keyword: `${title} ${artist}`,
-        apiType: 'itunes',
-        limit: 5
-      });
-      
-      // 严格匹配：歌名和歌手都需要匹配
-      const matchedSong = domesticResults.find(song => {
-        const songNameMatch = song.name.toLowerCase().includes(title.toLowerCase());
-        const artistMatch = song.artist.toLowerCase().includes(artist.toLowerCase());
-        return songNameMatch && artistMatch;
-      });
-      
-      if (matchedSong) {
-        // 使用国内版完全匹配到的歌曲信息
-        coverUrl = matchedSong.coverUrl || '';
-        matchedAlbum = matchedSong.album;
-        releaseDate = matchedSong.releaseDate; // 使用匹配到的发行日期
-        console.log('使用国内版完全匹配到的歌曲信息');
-      } else {
-        // 国内版没有完全匹配，使用国际版第一首歌的数据
-        const internationalResults = await musicApi.search({
+    if (selectedSong) {
+      // 使用用户选择的歌曲信息
+      coverUrl = selectedSong.coverUrl || '';
+      matchedAlbum = selectedSong.album;
+      releaseDate = selectedSong.releaseDate;
+      console.log('使用用户选择的歌曲信息');
+    } else {
+      // 如果是手动输入，才进行智能匹配
+      try {
+        // 先尝试国内版搜索
+        const domesticResults = await musicApi.search({
           keyword: `${title} ${artist}`,
-          apiType: 'itunes-intl',
-          limit: 1
+          apiType: 'itunes',
+          limit: 5
         });
         
-        if (internationalResults.length > 0) {
-          // 使用国际版第一首歌的信息
-          const internationalSong = internationalResults[0];
-          coverUrl = internationalSong.coverUrl || '';
-          matchedAlbum = internationalSong.album;
-          releaseDate = internationalSong.releaseDate; // 使用国际版的发行日期
-          console.log('使用国际版第一首歌的信息');
+        // 严格匹配：歌名和歌手都需要匹配
+        const matchedSong = domesticResults.find(song => {
+          const songNameMatch = song.name.toLowerCase().includes(title.toLowerCase());
+          const artistMatch = song.artist.toLowerCase().includes(artist.toLowerCase());
+          return songNameMatch && artistMatch;
+        });
+        
+        if (matchedSong) {
+          // 使用国内版完全匹配到的歌曲信息
+          coverUrl = matchedSong.coverUrl || '';
+          matchedAlbum = matchedSong.album;
+          releaseDate = matchedSong.releaseDate;
+          console.log('使用国内版完全匹配到的歌曲信息');
         } else {
-          console.log('国际版也没有找到歌曲，使用用户输入的信息');
+          // 国内版没有完全匹配，使用国际版第一首歌的数据
+          const internationalResults = await musicApi.search({
+            keyword: `${title} ${artist}`,
+            apiType: 'itunes-intl',
+            limit: 1
+          });
+          
+          if (internationalResults.length > 0) {
+            // 使用国际版第一首歌的信息
+            const internationalSong = internationalResults[0];
+            coverUrl = internationalSong.coverUrl || '';
+            matchedAlbum = internationalSong.album;
+            releaseDate = internationalSong.releaseDate;
+            console.log('使用国际版第一首歌的信息');
+          } else {
+            console.log('国际版也没有找到歌曲，使用用户输入的信息');
+          }
         }
+      } catch (error) {
+        console.warn('歌曲信息匹配失败，使用用户输入的信息:', error);
       }
-    } catch (error) {
-      console.warn('歌曲信息匹配失败，使用用户输入的信息:', error);
     }
     
     // 使用匹配到的信息或用户输入的信息
