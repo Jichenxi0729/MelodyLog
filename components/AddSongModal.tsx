@@ -1,20 +1,58 @@
-import React, { useState } from 'react';
-import { X, Music, User, Disc, Loader2 } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { X, Music, User, Disc, Loader2, Search, Check, ChevronDown, ChevronUp } from 'lucide-react';
+import { musicApi, SongInfo } from '../services/musicApiAdapter';
 
 interface AddSongModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onAdd: (title: string, artist: string, album: string) => Promise<void>;
+  onAdd: (title: string, artist: string, album: string, coverUrl?: string, releaseDate?: string) => Promise<void>;
   songs: any[]; // 添加歌曲列表用于重复检测
 }
 
+// 搜索相关状态
+interface SearchResult {
+  id: string | number;
+  name: string;
+  artist: string;
+  album: string;
+  duration: number;
+  coverUrl?: string;
+}
+
 export const AddSongModal: React.FC<AddSongModalProps> = ({ isOpen, onClose, onAdd, songs }) => {
+  // 所有Hooks必须在条件返回之前调用
   const [title, setTitle] = useState('');
   const [artist, setArtist] = useState('');
   const [album, setAlbum] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [isDuplicate, setIsDuplicate] = useState(false);
+  
+  // 搜索相关状态
+  const [searchKeyword, setSearchKeyword] = useState('');
+  const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
+  const [selectedSong, setSelectedSong] = useState<SearchResult | null>(null);
+  const [showSearchResults, setShowSearchResults] = useState(false);
+  const [activeTab, setActiveTab] = useState<'search' | 'manual'>('search');
+  const [searchError, setSearchError] = useState(''); // 搜索平台状态
+  const [searchPlatform, setSearchPlatform] = useState<'itunes' | 'itunes-intl'>('itunes'); // 搜索平台选择
 
+  // 重置状态
+  useEffect(() => {
+    if (isOpen) {
+      setTitle('');
+      setArtist('');
+      setAlbum('');
+      setSearchKeyword('');
+      setSearchResults([]);
+      setSelectedSong(null);
+      setShowSearchResults(false);
+      setActiveTab('search');
+      setSearchError(''); // 重置搜索错误
+    }
+  }, [isOpen]);
+
+  // 条件返回必须在所有Hooks之后
   if (!isOpen) return null;
 
   // 检查歌曲是否重复
@@ -51,8 +89,48 @@ export const AddSongModal: React.FC<AddSongModalProps> = ({ isOpen, onClose, onA
     }
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  // 搜索歌曲
+  const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!searchKeyword.trim()) return;
+
+    // 使用选择的平台进行音乐搜索
+    setIsSearching(true);
+    setSearchResults([]);
+    setSearchError('');
+    setShowSearchResults(true); // 显示搜索结果区域
+
+    try {
+      // 使用新的API适配器，支持多种API类型
+      const result = await musicApi.search({
+        keyword: searchKeyword,
+        apiType: searchPlatform,
+        limit: 10
+      });
+      
+      setSearchResults(result);
+    } catch (error) {
+      console.error('搜索失败:', error);
+      setSearchError('搜索失败，请重试或切换搜索平台');
+      setSearchResults([]);
+    } finally {
+      setIsSearching(false);
+    }
+  };
+
+  // 选择搜索结果
+  const handleSelectSong = (song: SearchResult) => {
+    setSelectedSong(song);
+    setTitle(song.name);
+    setArtist(song.artist);
+    setAlbum(song.album);
+    
+    // 检查是否重复
+    setIsDuplicate(checkDuplicate(song.name, song.artist));
+  };
+
+  // 确认添加
+  const handleConfirmAdd = async () => {
     if (!title.trim() || !artist.trim()) return;
 
     // 提交前再次检查重复
@@ -62,20 +140,80 @@ export const AddSongModal: React.FC<AddSongModalProps> = ({ isOpen, onClose, onA
     }
 
     setIsLoading(true);
-    await onAdd(title, artist, album);
+    
+    // 智能匹配歌曲信息：先尝试国内版，如果没有完全匹配就使用国际版第一首歌
+    let coverUrl = '';
+    let matchedAlbum = album;
+    let releaseDate: string | undefined = undefined;
+    
+    try {
+      // 先尝试国内版搜索
+      const domesticResults = await musicApi.search({
+        keyword: `${title} ${artist}`,
+        apiType: 'itunes',
+        limit: 5
+      });
+      
+      // 严格匹配：歌名和歌手都需要匹配
+      const matchedSong = domesticResults.find(song => {
+        const songNameMatch = song.name.toLowerCase().includes(title.toLowerCase());
+        const artistMatch = song.artist.toLowerCase().includes(artist.toLowerCase());
+        return songNameMatch && artistMatch;
+      });
+      
+      if (matchedSong) {
+        // 使用国内版完全匹配到的歌曲信息
+        coverUrl = matchedSong.coverUrl || '';
+        matchedAlbum = matchedSong.album;
+        releaseDate = matchedSong.releaseDate; // 使用匹配到的发行日期
+        console.log('使用国内版完全匹配到的歌曲信息');
+      } else {
+        // 国内版没有完全匹配，使用国际版第一首歌的数据
+        const internationalResults = await musicApi.search({
+          keyword: `${title} ${artist}`,
+          apiType: 'itunes-intl',
+          limit: 1
+        });
+        
+        if (internationalResults.length > 0) {
+          // 使用国际版第一首歌的信息
+          const internationalSong = internationalResults[0];
+          coverUrl = internationalSong.coverUrl || '';
+          matchedAlbum = internationalSong.album;
+          releaseDate = internationalSong.releaseDate; // 使用国际版的发行日期
+          console.log('使用国际版第一首歌的信息');
+        } else {
+          console.log('国际版也没有找到歌曲，使用用户输入的信息');
+        }
+      }
+    } catch (error) {
+      console.warn('歌曲信息匹配失败，使用用户输入的信息:', error);
+    }
+    
+    // 使用匹配到的信息或用户输入的信息
+    await onAdd(title, artist, matchedAlbum, coverUrl, releaseDate);
     setIsLoading(false);
     
-    // Reset and close
+    // 重置状态
     setTitle('');
     setArtist('');
     setAlbum('');
-    setIsDuplicate(false);
+    setSearchKeyword('');
+    setSearchResults([]);
+    setSelectedSong(null);
+    setShowSearchResults(false);
     onClose();
+  };
+
+  // 手动提交
+  const handleManualSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    await handleConfirmAdd();
   };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl overflow-hidden scale-100 animate-in zoom-in-95 duration-200">
+      <div className="bg-white rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden scale-100 animate-in zoom-in-95 duration-200">
         
         {/* Header */}
         <div className="bg-brand-dark px-6 py-4 flex justify-between items-center">
@@ -88,73 +226,254 @@ export const AddSongModal: React.FC<AddSongModalProps> = ({ isOpen, onClose, onA
           </button>
         </div>
 
-        {/* Form */}
-        <form onSubmit={handleSubmit} className="p-6 space-y-4">
-          
-          <div className="space-y-1">
-            <label className="block text-sm font-medium text-slate-700">歌名 <span className="text-red-500">*</span></label>
-            <div className="relative">
-              <Music className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
-              <input
-                type="text"
-                value={title}
-                onChange={handleTitleChange}
-                placeholder="例如：七里香"
-                className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-light focus:border-brand-light outline-none transition-all"
-                required
-                autoFocus
-              />
-            </div>
-          </div>
-
-          <div className="space-y-1">
-            <label className="block text-sm font-medium text-slate-700">歌手 <span className="text-red-500">*</span></label>
-            <div className="relative">
-              <User className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
-              <input
-                type="text"
-                value={artist}
-                onChange={handleArtistChange}
-                placeholder="例如：周杰伦（多个歌手用逗号分隔）"
-                className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-light focus:border-brand-light outline-none transition-all"
-                required
-              />
-            </div>
-            {isDuplicate && (
-              <div className="mt-2 p-2 bg-red-50 border border-red-200 rounded-md">
-                <div className="flex items-center text-red-700">
-                  <svg className="w-4 h-4 mr-2" fill="currentColor" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
-                  </svg>
-                  <span className="text-sm font-medium">歌曲已存在！请勿重复添加相同的歌曲。</span>
-                </div>
-              </div>
-            )}
-          </div>
-
-        <div className="space-y-1">
-          <label className="block text-sm font-medium text-slate-700">专辑 <span className="text-slate-400 text-xs">(选填)</span></label>
-          <div className="relative">
-            <Disc className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
-            <input
-              type="text"
-              value={album}
-              onChange={(e) => setAlbum(e.target.value)}
-              placeholder="例如：七里香"
-              className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-light focus:border-brand-light outline-none transition-all"
-            />
-          </div>
+        {/* 标签页切换 */}
+        <div className="flex border-b border-gray-200 bg-gray-50">
+          <button
+            onClick={() => setActiveTab('search')}
+            className={`flex-1 py-3 text-sm font-medium transition-colors ${
+              activeTab === 'search' 
+                ? 'text-brand-light border-b-2 border-brand-light' 
+                : 'text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            智能搜索
+          </button>
+          <button
+            onClick={() => setActiveTab('manual')}
+            className={`flex-1 py-3 text-sm font-medium transition-colors ${
+              activeTab === 'manual' 
+                ? 'text-brand-light border-b-2 border-brand-light' 
+                : 'text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            手动输入
+          </button>
         </div>
 
-          <button
-            type="submit"
-            disabled={isLoading}
-            className="w-full mt-6 bg-brand-light hover:bg-blue-500 text-white font-semibold py-3 rounded-lg shadow-lg shadow-blue-500/30 active:scale-[0.98] transition-all flex items-center justify-center gap-2"
-          >
-            {isLoading ? <Loader2 className="animate-spin" size={20} /> : '保存记录'}
-          </button>
+        <div className="p-6 max-h-96 overflow-y-auto">
+          {activeTab === 'search' ? (
+            <>
+              {/* 搜索区域 */}
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <label className="block text-sm font-medium text-slate-700">搜索歌曲</label>
+                  
+                  {/* 平台选择 */}
+                  <div className="space-y-2">
+                    {/* 主要API平台选择 */}
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setSearchPlatform('itunes')}
+                        className={`py-2 px-3 text-xs font-medium rounded-md transition-colors ${
+                          searchPlatform === 'itunes' 
+                            ? 'bg-brand-light text-white' 
+                            : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                        }`}
+                      >
+                        苹果音乐
+                        <div className="text-xs opacity-80 mt-1">国内版</div>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setSearchPlatform('itunes-intl')}
+                        className={`py-2 px-3 text-xs font-medium rounded-md transition-colors ${
+                          searchPlatform === 'itunes-intl' 
+                            ? 'bg-brand-light text-white' 
+                            : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                        }`}
+                      >
+                        苹果音乐
+                        <div className="text-xs opacity-80 mt-1">国际版</div>
+                      </button>
+                    </div>
+                    
 
-        </form>
+                  </div>
+                  
+                  <div className="flex gap-2">
+                    <div className="relative flex-1">
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+                      <input
+                        type="text"
+                        value={searchKeyword}
+                        onChange={(e) => setSearchKeyword(e.target.value)}
+                        onKeyPress={(e) => e.key === 'Enter' && handleSearch(e as any)}
+                        placeholder="输入歌曲名、歌手名或关键词..."
+                        className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-light focus:border-brand-light outline-none transition-all"
+                      />
+                    </div>
+                    <button
+                      onClick={(e) => handleSearch(e)}
+                      disabled={isSearching || !searchKeyword.trim()}
+                      className="px-6 bg-brand-light hover:bg-blue-500 text-white font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {isSearching ? <Loader2 className="animate-spin" size={16} /> : '搜索'}
+                    </button>
+                  </div>
+                </div>
+
+                {/* 搜索结果 */}
+                {showSearchResults && (
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-medium text-slate-700">搜索结果</span>
+                      <button 
+                        onClick={() => setShowSearchResults(!showSearchResults)}
+                        className="text-slate-400 hover:text-slate-600"
+                      >
+                        {showSearchResults ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                      </button>
+                    </div>
+                    
+                    {isSearching ? (
+                      <div className="flex justify-center py-8">
+                        <Loader2 className="animate-spin text-brand-light" size={24} />
+                      </div>
+                    ) : searchResults.length > 0 ? (
+                      <div className="space-y-2 max-h-48 overflow-y-auto">
+                        {searchResults.map((song) => (
+                          <div
+                            key={song.id}
+                            onClick={() => handleSelectSong(song)}
+                            className={`p-3 border rounded-lg cursor-pointer transition-all hover:border-brand-light hover:bg-blue-50 ${
+                              selectedSong?.id === song.id ? 'border-brand-light bg-blue-50' : 'border-gray-200'
+                            }`}
+                          >
+                            <div className="flex items-center gap-3">
+                              {/* 封面图片 */}
+                              {song.coverUrl ? (
+                                <img
+                                  src={song.coverUrl}
+                                  alt={`${song.name} cover`}
+                                  className="w-10 h-10 rounded object-cover flex-shrink-0"
+                                />
+                              ) : (
+                                <div className="w-10 h-10 rounded bg-slate-200 flex items-center justify-center flex-shrink-0">
+                                    <Music className="text-slate-400" size={16} />
+                                </div>
+                              )}
+                              <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-1">
+                    <div className="font-medium text-slate-800 truncate">
+                      {song.name} · <span className="text-blue-600">{song.artist}</span>
+                    </div>
+                    <span className="text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full">
+                      {searchPlatform === 'itunes' ? 'Apple Music' : 
+                       searchPlatform === 'itunes-intl' ? 'iTunes国际版' : '未知平台'}
+                    </span>
+                  </div>
+                  <div className={`text-xs truncate ${song.album.includes('未知专辑') || song.album.includes('单曲') ? 'text-gray-400 italic' : 'text-slate-500'}`}>
+                    {song.album}
+                  </div>
+                </div>
+                              {selectedSong?.id === song.id && (
+                                <Check className="text-brand-light flex-shrink-0" size={16} />
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="text-center py-8 text-slate-500">
+                        未找到相关歌曲，请尝试其他关键词
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </>
+          ) : (
+            <>
+              {/* 手动输入区域 */}
+              <form onSubmit={handleManualSubmit} className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">歌曲信息</label>
+                  <div className="space-y-3">
+                    <div>
+                      <div className="flex items-center gap-2 mb-1">
+                        <Music size={16} className="text-slate-400" />
+                        <span className="text-sm text-slate-600">歌曲名</span>
+                      </div>
+                      <input
+                        type="text"
+                        value={title}
+                        onChange={handleTitleChange}
+                        placeholder="输入歌曲名称"
+                        className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-light focus:border-brand-light outline-none transition-all"
+                      />
+                    </div>
+                    
+                    <div>
+                      <div className="flex items-center gap-2 mb-1">
+                        <User size={16} className="text-slate-400" />
+                        <span className="text-sm text-slate-600">歌手</span>
+                      </div>
+                      <input
+                        type="text"
+                        value={artist}
+                        onChange={handleArtistChange}
+                        placeholder="输入歌手名称"
+                        className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-light focus:border-brand-light outline-none transition-all"
+                      />
+                    </div>
+                    
+                    <div>
+                      <div className="flex items-center gap-2 mb-1">
+                        <Disc size={16} className="text-slate-400" />
+                        <span className="text-sm text-slate-600">专辑</span>
+                      </div>
+                      <input
+                        type="text"
+                        value={album}
+                        onChange={(e) => setAlbum(e.target.value)}
+                        placeholder="输入专辑名称（可选）"
+                        className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-light focus:border-brand-light outline-none transition-all"
+                      />
+                    </div>
+                  </div>
+
+                  {/* 重复检测 */}
+                  {isDuplicate && (
+                    <div className="bg-red-50 border border-red-200 rounded-lg p-3">
+                      <div className="flex items-center gap-2 text-red-700">
+                        <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                        </svg>
+                        <span className="text-sm font-medium">检测到重复歌曲</span>
+                      </div>
+                      <p className="text-red-600 text-xs mt-1">歌曲列表中已存在相同歌曲，请确认是否要重复添加</p>
+                    </div>
+                  )}
+                </div>
+              </form>
+            </>
+          )}
+        </div>
+
+        {/* 底部按钮 */}
+        <div className="bg-gray-50 px-6 py-4 border-t border-gray-200 flex justify-end gap-3">
+          <button
+            onClick={onClose}
+            className="px-6 py-2 text-slate-600 hover:text-slate-800 font-medium rounded-lg transition-colors"
+          >
+            取消
+          </button>
+          <button
+            onClick={handleConfirmAdd}
+            disabled={isLoading || !title.trim() || !artist.trim() || isDuplicate}
+            className="px-6 py-2 bg-brand-light hover:bg-blue-500 text-white font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {isLoading ? (
+              <div className="flex items-center gap-2">
+                <Loader2 className="animate-spin" size={16} />
+                添加中...
+              </div>
+            ) : (
+              '添加歌曲'
+            )}
+          </button>
+        </div>
       </div>
     </div>
   );

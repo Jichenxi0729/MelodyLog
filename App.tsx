@@ -3,12 +3,12 @@ import { Plus, Search, Music2, UploadCloud, Home, Users, Download } from 'lucide
 import { Song, ViewState } from './types';
 import { SongCard } from './components/SongCard';
 import { AddSongModal } from './components/AddSongModal';
-import { ImportModal } from './components/ImportModal';
+import ImportModal from './components/ImportModal';
 import { ArtistLibrary } from './components/ArtistLibrary';
 import { ArtistDetail } from './components/ArtistDetail';
 import { AlbumDetail } from './components/AlbumDetail';
 import { SongDetail } from './components/SongDetail';
-import { fetchSongMetadata } from './services/musicService';
+import { musicApi } from './services/musicApiAdapter';
 import { exportSongsToCSV } from './utils/csvExporter';
 
 // Constants
@@ -69,44 +69,154 @@ const App: React.FC = () => {
     }
   };
 
-  const handleAddSong = async (title: string, artist: string, album: string) => {
+  const handleAddSong = async (title: string, artist: string, album: string, coverUrl?: string, releaseDate?: string) => {
     // 将歌手字符串分割为数组，支持逗号、顿号、斜杠分隔
     const artists = artist.split(/[,，、\/]/).map(a => a.trim()).filter(a => a.length > 0);
     
-    const metadata = await fetchSongMetadata(title, artists.join(' '));
+    // 智能匹配歌曲信息：先尝试国内版，如果没有完全匹配就使用国际版第一首歌
+    let matchedCoverUrl = coverUrl || '';
+    let matchedAlbum = album;
+    let matchedReleaseDate = releaseDate;
+    
+    // 如果没有提供封面和发行日期，则尝试智能匹配
+    if (!coverUrl || !releaseDate) {
+      try {
+        // 先尝试国内版搜索
+        const domesticResults = await musicApi.search({
+          keyword: `${title} ${artists.join(' ')}`,
+          apiType: 'itunes',
+          limit: 5
+        });
+        
+        // 严格匹配：歌名和歌手都需要匹配
+        const matchedSong = domesticResults.find(song => {
+          const songNameMatch = song.name.toLowerCase().includes(title.toLowerCase());
+          const artistMatch = song.artist.toLowerCase().includes(artists.join(' ').toLowerCase());
+          return songNameMatch && artistMatch;
+        });
+        
+        if (matchedSong) {
+          // 使用国内版完全匹配到的歌曲信息
+          matchedCoverUrl = matchedSong.coverUrl || '';
+          matchedAlbum = matchedSong.album;
+          matchedReleaseDate = matchedSong.releaseDate; // 使用匹配到的发行日期
+          console.log('使用国内版完全匹配到的歌曲信息');
+        } else {
+          // 国内版没有完全匹配，使用国际版第一首歌的数据
+          const internationalResults = await musicApi.search({
+            keyword: `${title} ${artists.join(' ')}`,
+            apiType: 'itunes-intl',
+            limit: 1
+          });
+          
+          if (internationalResults.length > 0) {
+            // 使用国际版第一首歌的信息
+            const internationalSong = internationalResults[0];
+            matchedCoverUrl = internationalSong.coverUrl || '';
+            matchedAlbum = internationalSong.album;
+            matchedReleaseDate = internationalSong.releaseDate; // 使用国际版的发行日期
+            console.log('使用国际版第一首歌的信息');
+          } else {
+            console.log('国际版也没有找到歌曲，使用用户输入的信息');
+          }
+        }
+      } catch (error) {
+        console.warn('歌曲信息匹配失败，使用用户输入的信息:', error);
+      }
+    }
     
     const newSong: Song = {
       id: crypto.randomUUID(),
       title,
       artists,
-      album: album || metadata.album,
-      coverUrl: metadata.coverUrl,
-      releaseDate: metadata.releaseDate,
+      album: matchedAlbum,
+      coverUrl: matchedCoverUrl,
+      releaseDate: matchedReleaseDate,
       addedAt: Date.now()
     };
 
     setSongs(prev => [newSong, ...prev]);
   };
 
-  const handleBulkImport = async (lines: string[]) => {
+  const handleBulkImport = async (lines: string[], enableSmartMatch: boolean = true) => {
     const newSongs: Song[] = [];
     
-    for (const line of lines) {
+    // 延迟函数
+    const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+    
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
       const parts = line.split('-').map(s => s.trim());
       if (parts.length >= 2) {
         const title = parts[0];
         const artist = parts[1];
         // 将歌手字符串分割为数组，支持逗号、顿号、斜杠分隔
         const artists = artist.split(/[,，、\/]/).map(a => a.trim()).filter(a => a.length > 0);
-        const metadata = await fetchSongMetadata(title, artists.join(' '));
+        
+        let coverUrl = '';
+        let matchedAlbum = '';
+        let releaseDate: string | undefined = undefined;
+        
+        if (enableSmartMatch) {
+          // 智能匹配歌曲信息：先尝试国内版，如果没有完全匹配就使用国际版第一首歌
+          try {
+            // 添加API调用延迟，避免频繁请求
+            await delay(300);
+            
+            // 先尝试国内版搜索
+            const domesticResults = await musicApi.search({
+              keyword: `${title} ${artists.join(' ')}`,
+              apiType: 'itunes',
+              limit: 5
+            });
+            
+            // 严格匹配：歌名和歌手都需要匹配
+            const matchedSong = domesticResults.find(song => {
+              const songNameMatch = song.name.toLowerCase().includes(title.toLowerCase());
+              const artistMatch = song.artist.toLowerCase().includes(artists.join(' ').toLowerCase());
+              return songNameMatch && artistMatch;
+            });
+            
+            if (matchedSong) {
+              // 使用国内版完全匹配到的歌曲信息
+              coverUrl = matchedSong.coverUrl || '';
+              matchedAlbum = matchedSong.album;
+              releaseDate = matchedSong.releaseDate;
+              console.log(`[${i+1}/${lines.length}] 使用国内版完全匹配到的歌曲信息`);
+            } else {
+              // 国内版没有完全匹配，使用国际版第一首歌的数据
+              const internationalResults = await musicApi.search({
+                keyword: `${title} ${artists.join(' ')}`,
+                apiType: 'itunes-intl',
+                limit: 1
+              });
+              
+              if (internationalResults.length > 0) {
+                // 使用国际版第一首歌的信息
+                const internationalSong = internationalResults[0];
+                coverUrl = internationalSong.coverUrl || '';
+                matchedAlbum = internationalSong.album;
+                releaseDate = internationalSong.releaseDate;
+                console.log(`[${i+1}/${lines.length}] 使用国际版第一首歌的信息`);
+              } else {
+                console.log(`[${i+1}/${lines.length}] 国际版也没有找到歌曲，使用用户输入的信息`);
+              }
+            }
+          } catch (error) {
+            console.warn(`[${i+1}/${lines.length}] 歌曲信息匹配失败，使用用户输入的信息:`, error);
+          }
+        } else {
+          // 不启用智能匹配，使用用户输入的基本信息
+          console.log(`[${i+1}/${lines.length}] 跳过智能匹配，使用用户输入的信息`);
+        }
         
         newSongs.push({
           id: crypto.randomUUID(),
           title,
           artists,
-          coverUrl: metadata.coverUrl,
-          releaseDate: metadata.releaseDate,
-          album: metadata.album,
+          coverUrl: coverUrl,
+          releaseDate: releaseDate,
+          album: matchedAlbum,
           addedAt: Date.now()
         });
       }
@@ -164,85 +274,28 @@ const App: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-brand-bg pb-24 md:pb-10 font-sans">
+    <div className="min-h-screen bg-brand-bg font-sans">
       
-      {/* Header - Dark Theme Color with Glassmorphism */}
-      <header className="bg-brand-dark/95 backdrop-blur-md sticky top-0 z-40 border-b border-white/10 transition-all shadow-md">
-        <div className="max-w-3xl mx-auto px-4 py-2">
-            <div className="flex items-center gap-4 h-12">
-                
-                {/* Search Bar or Page Title */}
-                {view.type === 'HOME' ? (
-                     <div className="flex-1 relative max-w-lg group">
-                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                            <Search className="h-4 w-4 text-blue-200 group-focus-within:text-white transition-colors" />
-                        </div>
-                        <input
-                            type="text"
-                            className="block w-full pl-9 pr-3 py-2 rounded-full bg-white/10 backdrop-blur-md border border-white/5 text-white placeholder-blue-200/70 focus:bg-white/20 focus:ring-1 focus:ring-white/30 focus:outline-none transition-all text-sm"
-                            placeholder="搜索音乐..."
-                            value={searchQuery}
-                            onChange={(e) => setSearchQuery(e.target.value)}
-                        />
-                    </div>
-                ) : (
-                    <div className="flex-1 flex items-center">
-                         <span className="text-lg font-bold text-white tracking-wide">
-                            {view.type === 'ARTISTS' ? '歌手库' : ''}
-                            {view.type === 'ARTIST_DETAIL' ? '歌手详情' : ''}
-                            {view.type === 'ALBUM_DETAIL' ? '专辑详情' : ''}
-                            {view.type === 'SONG_DETAIL' ? '歌曲详细' : ''}
-                         </span>
-                    </div>
-                )}
-
-                {/* Desktop Actions */}
-                <div className="hidden md:flex items-center gap-1 shrink-0">
-                     <button 
-                        onClick={navigateToHome}
-                        className={`p-2 rounded-lg transition-colors ${view.type === 'HOME' ? 'bg-white/20 text-white' : 'text-blue-200 hover:bg-white/10 hover:text-white'}`}
-                        title="首页"
-                      >
-                        <Home size={20} />
-                      </button>
-                      <button 
-                        onClick={navigateToArtists}
-                        className={`p-2 rounded-lg transition-colors ${view.type === 'ARTISTS' ? 'bg-white/20 text-white' : 'text-blue-200 hover:bg-white/10 hover:text-white'}`}
-                        title="歌手库"
-                      >
-                        <Users size={20} />
-                      </button>
-                      
-                      <div className="w-px h-6 bg-white/20 mx-2"></div>
-                      
-                      <button 
-                        onClick={() => setIsImportModalOpen(true)}
-                        className="p-2 text-blue-200 hover:bg-white/10 hover:text-white rounded-lg transition-colors"
-                        title="导入"
-                      >
-                        <UploadCloud size={20} />
-                      </button>
-                      <button 
-                        onClick={() => exportSongsToCSV(songs)}
-                        className="p-2 text-blue-200 hover:bg-white/10 hover:text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                        title="导出CSV"
-                        disabled={songs.length === 0}
-                      >
-                        <Download size={20} />
-                      </button>
-                      <button 
-                        onClick={() => setIsAddModalOpen(true)}
-                        className="ml-1 bg-brand-light hover:bg-blue-400 text-white px-3 py-1.5 rounded-full text-sm font-medium shadow-lg shadow-blue-900/20 transition-all flex items-center gap-1"
-                      >
-                        <Plus size={16} /> <span className="hidden lg:inline">添加</span>
-                      </button>
-                </div>
+      {/* Main Content - Adjusted padding to make space for bottom navigation */}
+      <main className="max-w-3xl mx-auto px-4 pt-4 pb-24">
+        
+        {/* Search Bar for Home Page */}
+        {view.type === 'HOME' && (
+          <div className="mb-6">
+            <div className="relative max-w-lg mx-auto group">
+              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                <Search className="h-4 w-4 text-slate-500 group-focus-within:text-slate-700 transition-colors" />
+              </div>
+              <input
+                type="text"
+                className="block w-full pl-9 pr-3 py-2 rounded-full bg-slate-100 border border-slate-200 text-slate-800 placeholder-slate-500 focus:bg-white focus:ring-1 focus:ring-slate-300 focus:outline-none transition-all text-sm"
+                placeholder="搜索音乐..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
             </div>
-        </div>
-      </header>
-
-      {/* Main Content */}
-      <main className="max-w-3xl mx-auto px-4 py-4">
+          </div>
+        )}
         
         {/* VIEW: HOME */}
         {view.type === 'HOME' && (
@@ -335,45 +388,84 @@ const App: React.FC = () => {
 
       </main>
 
-      {/* Mobile Bottom Navigation */}
-      <div className="md:hidden fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur-md border-t border-slate-200 z-50 flex justify-around py-2 pb-safe">
-        <button 
-            onClick={navigateToHome}
-            className={`flex flex-col items-center gap-1 py-1 px-4 rounded-lg transition-colors ${view.type === 'HOME' ? 'text-brand-dark' : 'text-slate-400'}`}
-        >
-            <Home size={20} />
-            <span className="text-[10px] font-medium">首页</span>
-        </button>
-        <button 
-            onClick={() => setIsAddModalOpen(true)}
-            className="flex flex-col items-center gap-1 text-slate-400"
-        >
-            <div className="bg-brand-dark text-white p-3 rounded-full -mt-8 shadow-lg shadow-blue-900/20 border-4 border-slate-50 active:scale-95 transition-transform">
-                <Plus size={24} />
-            </div>
-            <span className="text-[10px] font-medium">添加</span>
-        </button>
-        <button 
-            onClick={navigateToArtists}
-            className={`flex flex-col items-center gap-1 py-1 px-4 rounded-lg transition-colors ${view.type === 'ARTISTS' ? 'text-brand-dark' : 'text-slate-400'}`}
-        >
-            <Users size={20} />
-            <span className="text-[10px] font-medium">歌手</span>
-        </button>
+      {/* Bottom Navigation Bar */}
+      <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 z-50 shadow-lg">
+        <div className="max-w-3xl mx-auto px-4 py-2">
+          <div className="flex justify-around items-center">
+            {/* Home Button */}
+            <button
+              onClick={navigateToHome}
+              className={`flex flex-col items-center justify-center w-14 h-14 rounded-xl transition-all duration-200 ${
+                view.type === 'HOME' 
+                  ? 'bg-brand-light/10 text-brand-light' 
+                  : 'text-slate-500 hover:text-brand-light hover:bg-slate-50'
+              }`}
+            >
+              <Home size={20} className="mb-0.5" />
+              <span className="text-xs font-medium">首页</span>
+            </button>
+
+            {/* Add Button - No text, thicker plus icon */}
+            <button
+              onClick={() => setIsAddModalOpen(true)}
+              className="flex items-center justify-center w-12 h-12 rounded-xl bg-gradient-to-r from-brand-light to-blue-500 text-white shadow-lg hover:shadow-xl transition-all duration-200"
+            >
+              <Plus size={24} strokeWidth={3} />
+            </button>
+
+            {/* Artists Button */}
+            <button
+              onClick={navigateToArtists}
+              className={`flex flex-col items-center justify-center w-14 h-14 rounded-xl transition-all duration-200 ${
+                view.type === 'ARTISTS' 
+                  ? 'bg-brand-light/10 text-brand-light' 
+                  : 'text-slate-500 hover:text-brand-light hover:bg-slate-50'
+              }`}
+            >
+              <Users size={20} className="mb-0.5" />
+              <span className="text-xs font-medium">歌手库</span>
+            </button>
+          </div>
+        </div>
       </div>
 
-      {/* Mobile Extra Buttons */}
-      <div className="md:hidden flex fixed bottom-20 right-4 z-40 gap-2">
+      {/* Desktop Action Buttons - Hide on mobile */}
+      <div className="hidden md:flex fixed bottom-6 right-6 z-40 gap-2">
+        <button 
+          onClick={() => setIsAddModalOpen(true)}
+          className="bg-brand-light hover:bg-blue-400 text-white px-4 py-2 rounded-full text-sm font-medium shadow-lg shadow-blue-900/20 transition-all flex items-center gap-1"
+        >
+          <Plus size={16} /> 添加
+        </button>
         <button
           onClick={() => setIsImportModalOpen(true)}
-          className="bg-white text-brand-dark p-3 rounded-full shadow-lg border border-slate-100 active:scale-95 transition-transform"
+          className="bg-white text-slate-700 p-2 rounded-full shadow-lg border border-slate-200 hover:bg-slate-50 transition-colors"
           aria-label="导入"
         >
           <UploadCloud size={20} />
         </button>
         <button
           onClick={() => exportSongsToCSV(songs)}
-          className="bg-white text-brand-dark p-3 rounded-full shadow-lg border border-slate-100 active:scale-95 transition-transform disabled:opacity-50 disabled:cursor-not-allowed"
+          className="bg-white text-slate-700 p-2 rounded-full shadow-lg border border-slate-200 hover:bg-slate-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          aria-label="导出CSV"
+          disabled={songs.length === 0}
+        >
+          <Download size={20} />
+        </button>
+      </div>
+
+      {/* Mobile Action Buttons - Show on mobile */}
+      <div className="md:hidden flex fixed bottom-20 right-4 z-40 gap-2">
+        <button
+          onClick={() => setIsImportModalOpen(true)}
+          className="bg-white text-slate-700 p-3 rounded-full shadow-lg border border-slate-200 hover:bg-slate-50 transition-colors"
+          aria-label="导入"
+        >
+          <UploadCloud size={20} />
+        </button>
+        <button
+          onClick={() => exportSongsToCSV(songs)}
+          className="bg-white text-slate-700 p-3 rounded-full shadow-lg border border-slate-200 hover:bg-slate-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           aria-label="导出CSV"
           disabled={songs.length === 0}
         >
@@ -399,3 +491,6 @@ const App: React.FC = () => {
 };
 
 export default App;
+
+
+

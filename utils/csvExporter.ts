@@ -6,7 +6,7 @@ import { Song } from '../types';
  */
 export const exportSongsToCSV = (songs: Song[]): void => {
   // CSV表头
-  const headers = ['序号', '歌名', '歌手', '专辑', '年份'];
+  const headers = ['序号', '歌名', '歌手', '专辑', '年份', '封面图片URL', '添加时间'];
   
   // 准备CSV数据
   const csvContent = [
@@ -19,13 +19,18 @@ export const exportSongsToCSV = (songs: Song[]): void => {
           : ''
         : '';
       
+      // 格式化添加时间
+      const addedTime = new Date(song.addedAt).toLocaleString('zh-CN');
+      
       // 构建CSV行，处理特殊字符
       const values = [
         (index + 1).toString(), // 序号
         escapeCSV(song.title), // 歌名
         escapeCSV(song.artists.join('/')), // 歌手
         escapeCSV(song.album || ''), // 专辑
-        year // 年份
+        year, // 年份
+        escapeCSV(song.coverUrl || ''), // 封面图片URL
+        escapeCSV(addedTime) // 添加时间
       ];
       
       return values.join(',');
