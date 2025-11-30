@@ -9,17 +9,6 @@ interface AddSongModalProps {
   songs: any[]; // 添加歌曲列表用于重复检测
 }
 
-// 搜索相关状态
-interface SearchResult {
-  id: string | number;
-  name: string;
-  artist: string;
-  album: string;
-  duration: number;
-  coverUrl?: string;
-  releaseDate?: string; // 添加发行日期字段
-}
-
 export const AddSongModal: React.FC<AddSongModalProps> = ({ isOpen, onClose, onAdd, songs }) => {
   // 所有Hooks必须在条件返回之前调用
   const [title, setTitle] = useState('');
@@ -30,13 +19,13 @@ export const AddSongModal: React.FC<AddSongModalProps> = ({ isOpen, onClose, onA
   
   // 搜索相关状态
   const [searchKeyword, setSearchKeyword] = useState('');
-  const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
+  const [searchResults, setSearchResults] = useState<SongInfo[]>([]);
   const [isSearching, setIsSearching] = useState(false);
-  const [selectedSong, setSelectedSong] = useState<SearchResult | null>(null);
+  const [selectedSong, setSelectedSong] = useState<SongInfo | null>(null);
   const [showSearchResults, setShowSearchResults] = useState(false);
   const [activeTab, setActiveTab] = useState<'search' | 'manual'>('manual'); // 默认切换到手动输入
   const [searchError, setSearchError] = useState(''); // 搜索平台状态
-  const [searchPlatform, setSearchPlatform] = useState<'itunes-domestic' | 'itunes-international'>('itunes-domestic'); // 搜索平台选择
+  const [searchPlatform, setSearchPlatform] = useState<'itunes-domestic' | 'itunes-international' | 'netease' | 'qq'>('itunes-domestic'); // 搜索平台选择
 
   // 重置状态
   useEffect(() => {
@@ -102,6 +91,7 @@ export const AddSongModal: React.FC<AddSongModalProps> = ({ isOpen, onClose, onA
     setShowSearchResults(true); // 显示搜索结果区域
 
     try {
+      console.log('开始搜索，平台:', searchPlatform, '关键词:', searchKeyword);
       // 使用新的API适配器，支持多种API类型
       const result = await musicApi.search({
         keyword: searchKeyword,
@@ -109,7 +99,38 @@ export const AddSongModal: React.FC<AddSongModalProps> = ({ isOpen, onClose, onA
         limit: 10
       });
       
+      console.log('搜索结果:', result);
       setSearchResults(result);
+      
+      // 如果结果为空，检查是否是API类型的问题
+      if (result.length === 0) {
+        console.log('搜索结果为空，尝试直接测试API响应');
+        
+        // 直接测试Lokua_Music API响应
+        if (searchPlatform === 'netease' || searchPlatform === 'qq') {
+          try {
+            const response = await fetch('https://lokuamusic.top/api/music', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json'
+              },
+              body: JSON.stringify({
+                input: searchKeyword,
+                filter: 'name',
+                type: searchPlatform,
+                page: 1
+              })
+            });
+            
+            if (response.ok) {
+              const data = await response.json();
+              console.log('直接API测试响应:', data);
+            }
+          } catch (apiError) {
+            console.error('直接API测试失败:', apiError);
+          }
+        }
+      }
     } catch (error) {
       console.error('搜索失败:', error);
       setSearchError('搜索失败，请重试或切换搜索平台');
@@ -120,7 +141,7 @@ export const AddSongModal: React.FC<AddSongModalProps> = ({ isOpen, onClose, onA
   };
 
   // 选择搜索结果
-  const handleSelectSong = (song: SearchResult) => {
+  const handleSelectSong = (song: SongInfo) => {
     setSelectedSong(song);
     setTitle(song.name);
     setArtist(song.artist);
@@ -296,6 +317,30 @@ export const AddSongModal: React.FC<AddSongModalProps> = ({ isOpen, onClose, onA
                     苹果音乐
                     <div className="text-xs opacity-80 mt-1">国际版</div>
                   </button>
+                  <button
+                    type="button"
+                    onClick={() => setSearchPlatform('netease')}
+                    className={`py-2 px-3 text-xs font-medium rounded-md transition-colors ${
+                      searchPlatform === 'netease' 
+                        ? 'bg-brand-light text-white' 
+                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                    }`}
+                  >
+                    网易云音乐
+                    <div className="text-xs opacity-80 mt-1">官方API</div>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSearchPlatform('qq')}
+                    className={`py-2 px-3 text-xs font-medium rounded-md transition-colors ${
+                      searchPlatform === 'qq' 
+                        ? 'bg-brand-light text-white' 
+                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                    }`}
+                  >
+                    QQ音乐
+                    <div className="text-xs opacity-80 mt-1">官方API</div>
+                  </button>
                     </div>
                     
 
@@ -370,14 +415,16 @@ export const AddSongModal: React.FC<AddSongModalProps> = ({ isOpen, onClose, onA
                     </div>
                     <span className="text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full">
                       {searchPlatform === 'itunes-domestic' ? 'Apple Music' : 
-                       searchPlatform === 'itunes-international' ? 'iTunes国际版' : '未知平台'}
+                       searchPlatform === 'itunes-international' ? 'iTunes国际版' :
+                       searchPlatform === 'netease' ? '网易云音乐' :
+                       searchPlatform === 'qq' ? 'QQ音乐' : '未知平台'}
                     </span>
                   </div>
                   <div className={`text-xs truncate ${song.album.includes('未知专辑') || song.album.includes('单曲') ? 'text-gray-400 italic' : 'text-slate-500'}`}>
                     {song.album}
                   </div>
                 </div>
-                              {selectedSong?.id === song.id && (
+                              {selectedSong && selectedSong.id === song.id && (
                                 <Check className="text-brand-light flex-shrink-0" size={16} />
                               )}
                             </div>

@@ -87,9 +87,10 @@ interface SongDetailProps {
   onBack: () => void;
   onArtistClick?: (artist: string) => void;
   onAlbumClick?: (album: string) => void;
+  onUpdateSong?: (updatedSong: Song) => void;
 }
 
-export const SongDetail: React.FC<SongDetailProps> = ({ songs, songId, onBack, onArtistClick, onAlbumClick }) => {
+export const SongDetail: React.FC<SongDetailProps> = ({ songs, songId, onBack, onArtistClick, onAlbumClick, onUpdateSong }) => {
   // 使用props传入的songId而不是从URL参数获取
   const navigate = useNavigate();
   // 状态管理
@@ -102,6 +103,13 @@ export const SongDetail: React.FC<SongDetailProps> = ({ songs, songId, onBack, o
   const [savedLyrics, setSavedLyrics] = useState<string[][]>([]); // 改为二维数组，每个子数组代表一组歌词
   const [isLongPressing, setIsLongPressing] = useState<Record<string, boolean>>({});
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+  
+  // 编辑状态
+  const [isEditing, setIsEditing] = useState(false);
+  const [editedTitle, setEditedTitle] = useState('');
+  const [editedArtists, setEditedArtists] = useState<string[]>([]);
+  const [editedAlbum, setEditedAlbum] = useState('');
+  const [editedReleaseDate, setEditedReleaseDate] = useState('');
   
   // 响应式处理
   useEffect(() => {
@@ -118,6 +126,12 @@ export const SongDetail: React.FC<SongDetailProps> = ({ songs, songId, onBack, o
       const foundSong = songs.find(s => s.id === songId);
       if (foundSong) {
         setSong(foundSong);
+        // 初始化编辑状态
+        setEditedTitle(foundSong.title);
+        setEditedArtists([...foundSong.artists]);
+        setEditedAlbum(foundSong.album || '');
+        setEditedReleaseDate(foundSong.releaseDate || '');
+        
         // 加载歌词
         const loadLyrics = async () => {
           try {
@@ -155,6 +169,62 @@ export const SongDetail: React.FC<SongDetailProps> = ({ songs, songId, onBack, o
   }, [songId, songs]);
   
   // 使用props传入的onBack函数，不再使用navigate(-1)
+
+  // 编辑功能函数
+  const handleEdit = () => {
+    if (song) {
+      setIsEditing(true);
+      setEditedTitle(song.title);
+      setEditedArtists([...song.artists]);
+      setEditedAlbum(song.album || '');
+      setEditedReleaseDate(song.releaseDate || '');
+    }
+  };
+
+  const handleSave = () => {
+    if (song && onUpdateSong) {
+      const updatedSong = {
+        ...song,
+        title: editedTitle,
+        artists: editedArtists,
+        album: editedAlbum,
+        releaseDate: editedReleaseDate
+      };
+      setSong(updatedSong);
+      onUpdateSong(updatedSong);
+      setIsEditing(false);
+    }
+  };
+
+  const handleCancel = () => {
+    setIsEditing(false);
+    if (song) {
+      setEditedTitle(song.title);
+      setEditedArtists([...song.artists]);
+      setEditedAlbum(song.album || '');
+      setEditedReleaseDate(song.releaseDate || '');
+    }
+  };
+
+  // 处理艺术家变化
+  const handleArtistChange = (index: number, value: string) => {
+    const newArtists = [...editedArtists];
+    newArtists[index] = value;
+    setEditedArtists(newArtists);
+  };
+
+  // 添加新的艺术家
+  const handleAddArtist = () => {
+    setEditedArtists([...editedArtists, '']);
+  };
+
+  // 删除艺术家
+  const handleRemoveArtist = (index: number) => {
+    if (editedArtists.length > 1) {
+      const newArtists = editedArtists.filter((_, i) => i !== index);
+      setEditedArtists(newArtists);
+    }
+  };
 
   const handleShare = () => {
     setShowShareModal(true);
@@ -335,42 +405,129 @@ export const SongDetail: React.FC<SongDetailProps> = ({ songs, songId, onBack, o
               </div>
             </div>
             <div className="text-left flex-1">
-              <h1 className="text-lg md:text-xl font-bold mb-1 text-gray-900 tracking-tight">{song.title}</h1>
-              <div className="text-base text-blue-600 mb-2 font-medium">
-                {song.artists.map((artist, index) => (
-                  <React.Fragment key={artist}>
-                    <span 
-                      onClick={() => onArtistClick?.(artist)}
-                      className="cursor-pointer hover:underline hover:text-blue-700"
-                      title={`查看 ${artist} 的详情`}
+              {isEditing ? (
+                // 编辑模式
+                <div className="space-y-3">
+                  <input
+                    type="text"
+                    value={editedTitle}
+                    onChange={(e) => setEditedTitle(e.target.value)}
+                    className="text-lg md:text-xl font-bold mb-1 text-gray-900 tracking-tight w-full border-b border-gray-300 focus:border-blue-500 focus:outline-none pb-1"
+                  />
+                  
+                  <div className="space-y-2">
+                    {editedArtists.map((artist, index) => (
+                      <div key={index} className="flex items-center gap-2">
+                        <input
+                          type="text"
+                          value={artist}
+                          onChange={(e) => handleArtistChange(index, e.target.value)}
+                          className="text-base text-blue-600 mb-2 font-medium w-full border-b border-gray-300 focus:border-blue-500 focus:outline-none pb-1"
+                        />
+                        {editedArtists.length > 1 && (
+                          <button
+                            onClick={() => handleRemoveArtist(index)}
+                            className="text-red-500 hover:text-red-700"
+                          >
+                            ×
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                    <button
+                      onClick={handleAddArtist}
+                      className="text-blue-500 hover:text-blue-700 text-sm"
                     >
-                      {artist}
-                    </span>
-                    {index < song.artists.length - 1 && <span className="text-blue-600">/</span>}
-                  </React.Fragment>
-                ))}
-              </div>
-              {song.album && (
-                <p className="text-xs text-gray-500 mb-1">
-                  专辑: 
-                  <span 
-                    onClick={() => onAlbumClick?.(song.album!)}
-                    className="text-gray-700 cursor-pointer hover:underline hover:text-gray-900"
-                    title={`查看专辑: ${song.album}`}
-                  >
-                    {song.album}
-                  </span>
-                </p>
-              )}
-              {song.releaseDate && (
-                <p className="text-xs text-gray-500 mb-1">
-                  发行日期: <span className="text-gray-700">{new Date(song.releaseDate).getFullYear()}</span>
-                </p>
-              )}
-              {song.duration && (
-                <p className="text-xs text-gray-500">
-                  时长: <span className="text-gray-700">{Math.floor(song.duration / 60)}:{(song.duration % 60).toString().padStart(2, '0')}</span>
-                </p>
+                      + 添加艺术家
+                    </button>
+                  </div>
+                  
+                  <input
+                    type="text"
+                    value={editedAlbum}
+                    onChange={(e) => setEditedAlbum(e.target.value)}
+                    placeholder="专辑名称"
+                    className="text-xs text-gray-500 mb-1 w-full border-b border-gray-300 focus:border-blue-500 focus:outline-none pb-1"
+                  />
+                  
+                  <input
+                    type="text"
+                    value={editedReleaseDate}
+                    onChange={(e) => setEditedReleaseDate(e.target.value)}
+                    placeholder="发行日期 (YYYY-MM-DD)"
+                    className="text-xs text-gray-500 mb-1 w-full border-b border-gray-300 focus:border-blue-500 focus:outline-none pb-1"
+                  />
+                  
+                  <div className="flex gap-2 mt-2">
+                    <button
+                      onClick={handleSave}
+                      className="px-3 py-1 bg-blue-600 text-white rounded-full text-xs"
+                    >
+                      保存
+                    </button>
+                    <button
+                      onClick={handleCancel}
+                      className="px-3 py-1 bg-gray-300 text-gray-700 rounded-full text-xs"
+                    >
+                      取消
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                // 查看模式
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h1 className="text-lg md:text-xl font-bold mb-1 text-gray-900 tracking-tight">{song.title}</h1>
+                    <button
+                      onClick={handleEdit}
+                      className="text-blue-500 hover:text-blue-700"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                      </svg>
+                    </button>
+                  </div>
+                  
+                  <div className="text-base text-blue-600 mb-2 font-medium">
+                    {song.artists.map((artist, index) => (
+                      <React.Fragment key={artist}>
+                        <span 
+                          onClick={() => onArtistClick?.(artist)}
+                          className="cursor-pointer hover:underline hover:text-blue-700"
+                          title={`查看 ${artist} 的详情`}
+                        >
+                          {artist}
+                        </span>
+                        {index < song.artists.length - 1 && <span className="text-blue-600">/</span>}
+                      </React.Fragment>
+                    ))}
+                  </div>
+                  
+                  {song.album && (
+                    <p className="text-xs text-gray-500 mb-1">
+                      专辑: 
+                      <span 
+                        onClick={() => onAlbumClick?.(song.album!)}
+                        className="text-gray-700 cursor-pointer hover:underline hover:text-gray-900"
+                        title={`查看专辑: ${song.album}`}
+                      >
+                        {song.album}
+                      </span>
+                    </p>
+                  )}
+                  
+                  {song.releaseDate && (
+                    <p className="text-xs text-gray-500 mb-1">
+                      发行日期: <span className="text-gray-700">{new Date(song.releaseDate).getFullYear()}</span>
+                    </p>
+                  )}
+                  
+                  {song.duration && (
+                    <p className="text-xs text-gray-500">
+                      时长: <span className="text-gray-700">{Math.floor(song.duration / 60)}:{(song.duration % 60).toString().padStart(2, '0')}</span>
+                    </p>
+                  )}
+                </div>
               )}
             </div>
           </div>

@@ -138,6 +138,17 @@ const App: React.FC = () => {
     setSongs(prev => [newSong, ...prev]);
   };
 
+  const handleUpdateSong = (updatedSong: Song) => {
+    setSongs(prevSongs => {
+      const updatedSongs = prevSongs.map(song => 
+        song.id === updatedSong.id ? updatedSong : song
+      );
+      // 保存到localStorage
+      localStorage.setItem('songs', JSON.stringify(updatedSongs));
+      return updatedSongs;
+    });
+  };
+
   const handleBulkImport = async (lines: string[], enableSmartMatch: boolean = true) => {
     const newSongs: Song[] = [];
     const importErrors: string[] = [];
@@ -561,6 +572,7 @@ const App: React.FC = () => {
                 onBack={navigateBack}
                 onArtistClick={navigateToArtistDetail}
                 onAlbumClick={navigateToAlbumDetail}
+                onUpdateSong={handleUpdateSong}
             />
         )}
 
