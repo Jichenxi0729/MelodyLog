@@ -149,21 +149,21 @@ export const SongDetail: React.FC<SongDetailProps> = ({ songs, songId, onBack, o
         loadLyrics();
         
         // 加载保存的歌词
-            const saved = localStorage.getItem(`savedLyrics_${songId}`);
-            if (saved) {
-              try {
-                const parsed = JSON.parse(saved);
-                // 兼容旧格式：如果是一维数组，转换为二维数组
-                if (Array.isArray(parsed) && parsed.length > 0 && typeof parsed[0] === 'string') {
-                  setSavedLyrics([parsed]);
-                } else if (Array.isArray(parsed)) {
-                  setSavedLyrics(parsed);
-                }
-              } catch (error) {
-                console.error('解析保存的歌词失败:', error);
-                localStorage.removeItem(`savedLyrics_${songId}`);
-              }
+        try {
+          const saved = localStorage.getItem(`savedLyrics_${songId}`);
+          if (saved) {
+            const parsed = JSON.parse(saved);
+            // 兼容旧格式：如果是一维数组，转换为二维数组
+            if (Array.isArray(parsed) && parsed.length > 0 && typeof parsed[0] === 'string') {
+              setSavedLyrics([parsed]);
+            } else if (Array.isArray(parsed)) {
+              setSavedLyrics(parsed);
             }
+          }
+        } catch (error) {
+          console.error('解析保存的歌词失败:', error);
+          localStorage.removeItem(`savedLyrics_${songId}`);
+        }
       }
     }
   }, [songId, songs]);

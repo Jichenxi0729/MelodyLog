@@ -164,18 +164,33 @@ export const AddSongModal: React.FC<AddSongModalProps> = ({ isOpen, onClose, onA
     setIsLoading(true);
     
     // 如果用户通过搜索选择了具体的歌曲，直接使用选择的歌曲信息
+    let songTitle = title;
+    let songArtist = artist;
     let coverUrl = '';
     let matchedAlbum = album;
     let releaseDate: string | undefined = undefined;
     
     if (selectedSong) {
-      // 使用用户选择的歌曲信息
+      // 使用用户选择的歌曲信息，包括完整的标题、艺术家、专辑、封面和发行日期
+      songTitle = selectedSong.name;
+      songArtist = selectedSong.artist;
       coverUrl = selectedSong.coverUrl || '';
       matchedAlbum = selectedSong.album;
       releaseDate = selectedSong.releaseDate;
-      console.log('使用用户选择的歌曲信息');
+      console.log('使用用户选择的歌曲信息（' + 
+                 (searchPlatform === 'netease' ? '网易云音乐' : 
+                  searchPlatform === 'qq' ? 'QQ音乐' : 
+                  searchPlatform === 'itunes-domestic' ? 'Apple Music国内版' : 'iTunes国际版') + '）');
+      console.log('选择的歌曲完整信息:', {
+        name: selectedSong.name,
+        artist: selectedSong.artist,
+        album: selectedSong.album,
+        coverUrl: selectedSong.coverUrl,
+        releaseDate: selectedSong.releaseDate,
+        platform: selectedSong.platform
+      });
     } else {
-      // 如果是手动输入，才进行智能匹配
+      // 只有手动输入时，才进行智能匹配
       try {
         // 先尝试国内版搜索
         const domesticResults = await musicApi.search({
@@ -222,7 +237,7 @@ export const AddSongModal: React.FC<AddSongModalProps> = ({ isOpen, onClose, onA
     }
     
     // 使用匹配到的信息或用户输入的信息
-    await onAdd(title, artist, matchedAlbum, coverUrl, releaseDate);
+    await onAdd(songTitle, songArtist, matchedAlbum, coverUrl, releaseDate);
     setIsLoading(false);
     
     // 重置状态

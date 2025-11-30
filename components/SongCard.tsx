@@ -2,6 +2,13 @@ import React from 'react';
 import { Song } from '../types';
 import { Calendar, Disc, User, Trash2 } from 'lucide-react';
 
+// 添加isNaN函数的声明（在TypeScript中，isNaN是全局函数，但明确声明可以避免潜在问题）
+declare global {
+  interface NumberConstructor {
+    isNaN(number: number): boolean;
+  }
+}
+
 interface SongCardProps {
   song: Song;
   onArtistClick?: (artist: string) => void;

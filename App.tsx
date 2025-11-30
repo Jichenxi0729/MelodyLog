@@ -73,20 +73,21 @@ const App: React.FC = () => {
     // 将歌手字符串分割为数组，支持逗号、顿号、斜杠分隔
     const artists = artist.split(/[,，、\/]/).map(a => a.trim()).filter(a => a.length > 0);
     
-    // 智能匹配歌曲信息：先尝试国内版，如果没有完全匹配就使用国际版第一首歌
+    // 使用传入的歌曲信息，保留用户选择的平台数据
     let matchedCoverUrl = coverUrl || '';
     let matchedAlbum = album;
     let matchedReleaseDate = releaseDate;
     
-    // 如果没有提供封面和发行日期，则尝试智能匹配
-    if (!coverUrl || !releaseDate) {
+    // 只有在没有提供完整信息（手动输入模式）时，才尝试智能匹配
+    // 注意：coverUrl和releaseDate都必须是undefined才进行智能匹配，空字符串不算
+    if (coverUrl === undefined || releaseDate === undefined) {
       try {
         // 先尝试国内版搜索
-                  const domesticResults = await musicApi.search({
-                    keyword: `${title} ${artists.join(' ')}`,
-                    apiType: 'itunes-domestic',
-                    limit: 5
-                  });
+        const domesticResults = await musicApi.search({
+          keyword: `${title} ${artists.join(' ')}`,
+          apiType: 'itunes-domestic',
+          limit: 5
+        });
         
         // 严格匹配：歌名和歌手都需要匹配
         const matchedSong = domesticResults.find(song => {
@@ -123,6 +124,8 @@ const App: React.FC = () => {
       } catch (error) {
         console.warn('歌曲信息匹配失败，使用用户输入的信息:', error);
       }
+    } else {
+      console.log('使用用户选择平台的原始歌曲信息');
     }
     
     const newSong: Song = {
