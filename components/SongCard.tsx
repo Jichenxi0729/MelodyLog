@@ -11,12 +11,18 @@ interface SongCardProps {
 }
 
 export const SongCard: React.FC<SongCardProps> = ({ song, onArtistClick, onAlbumClick, onDelete, onSongClick }) => {
+  // 更新添加时间格式，包含年份信息
   const formattedDate = new Date(song.addedAt).toLocaleDateString('zh-CN', {
+    year: 'numeric',
     month: 'numeric',
     day: 'numeric',
   });
 
-  const releaseYear = song.releaseDate ? new Date(song.releaseDate).getFullYear() : null;
+  // 修复年份显示逻辑，兼容纯数字年份格式
+  const releaseYear = song.releaseDate ? 
+    (typeof song.releaseDate === 'string' && !isNaN(Number(song.releaseDate)) 
+      ? Number(song.releaseDate) 
+      : new Date(song.releaseDate).getFullYear()) : null;
 
   const handleArtistClick = (e: React.MouseEvent, artist: string) => {
     e.stopPropagation();

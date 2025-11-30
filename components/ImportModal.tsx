@@ -1,6 +1,15 @@
 import React, { useState } from 'react';
 import { Upload, X, AlertCircle, FileText, FileUp, CheckCircle2, Search } from 'lucide-react';
 
+interface SongImportInfo {
+  title: string;
+  artist: string;
+  album?: string;
+  coverUrl?: string;
+  releaseDate?: string;
+  addedAt?: string | number; // 支持添加时间字段
+}
+
 interface ImportModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -25,67 +34,134 @@ const ImportModal: React.FC<ImportModalProps> = ({ isOpen, onClose, onImport }) 
         .map(line => line.trim())
         .filter(line => line.length > 0);
       
-      await onImport(lines, enableSmartMatch);
+      // 验证文本格式
+      const validatedLines = lines.map(line => {
+        if (line.includes('-')) {
+          return line;
+        } else {
+          throw new Error(`第${lines.indexOf(line) + 1}行格式错误，应为"歌名 - 歌手"`);
+        }
+      });
+      
+      await onImport(validatedLines, enableSmartMatch);
       setStatus('success');
-    } catch (error) {
+      
+      // 成功后自动关闭
+      setTimeout(() => {
+        setStatus('idle');
+        setText('');
+        onClose();
+      }, 1500);
+    } catch (error: any) {
       console.error('导入错误:', error);
       setStatus('error');
-      alert('导入失败，请检查数据格式');
+      alert(`导入失败: ${error.message}`);
+      
+      // 失败后自动关闭
+      setTimeout(() => {
+        setStatus('idle');
+        setText('');
+        onClose();
+      }, 1500);
     } finally {
       setIsLoading(false);
-      
-      setTimeout(() => {
-        if (status === 'success' || status === 'error') {
-          setStatus('idle');
-          setText('');
-          onClose();
-        }
-      }, 1500);
     }
   };
 
   const handleCSVImport = async (file: File) => {
     setIsLoading(true);
     try {
+      // 文件大小限制（10MB）
+      if (file.size > 10 * 1024 * 1024) {
+        throw new Error('文件过大，请选择小于10MB的文件');
+      }
+      
+      // 验证文件类型
+      if (!file.name.toLowerCase().endsWith('.csv') && 
+          !file.type.includes('csv') && 
+          !file.type.includes('text')) {
+        throw new Error('请选择CSV格式的文件');
+      }
+      
       const text = await file.text();
-      const parsedLines = text.split('\n')
-        .slice(1) // 跳过表头
-        .map(line => line.trim())
-        .filter(line => line.length > 0)
-        .map(line => {
+      
+      // 安全的CSV解析
+      const parsedLines = [];
+      const lines = text.split('\n');
+      
+      for (let i = 1; i < lines.length; i++) { // 从第2行开始（跳过表头）
+        const line = lines[i].trim();
+        if (line.length === 0) continue;
+        
+        try {
           const values = parseCSVLine(line);
+          
+          // 验证基本格式
           if (values.length >= 3) {
-            // 格式：歌名 - 歌手 (专辑)
-            const title = values[1].trim();
-            const artist = values[2].trim();
-            const album = values.length >= 4 ? values[3].trim() : '';
+            // 字段映射：根据导出文件字段顺序调整映射
+            // 字段顺序：1.序号 2.歌名 3.歌手 4.专辑 5.年份 6.封面图片URL 7.添加时间
+            const songInfo = {
+              title: values[1] || '',
+              artist: values[2] || '',
+              album: values.length >= 4 ? values[3] : undefined,
+              releaseDate: values.length >= 5 ? values[4] : undefined, // 年份（第5列）
+              coverUrl: values.length >= 6 ? values[5] : undefined,   // 封面图片URL（第6列）
+              addedAt: values.length >= 7 ? values[6] : undefined     // 添加时间（第7列）
+            };
             
-            if (title && artist) {
-              return album ? `${title} - ${artist} (${album})` : `${title} - ${artist}`;
+            // 验证必要字段
+            if (songInfo.title && songInfo.artist) {
+              parsedLines.push(songInfo);
             }
           }
-          return null;
-        }).filter(line => line !== null) as string[];
+        } catch (error) {
+          console.warn(`第${i+1}行解析失败:`, error);
+          // 继续处理其他行，不中断整个导入过程
+        }
+      }
       
       if (parsedLines.length > 0) {
-        await onImport(parsedLines, enableSmartMatch);
+        // 转换为更安全的数据结构
+        const importData = parsedLines.map(info => 
+          JSON.stringify(info)
+        );
+        
+        await onImport(importData, enableSmartMatch);
         setStatus('success');
-      } else {
-        alert('CSV文件格式不正确或没有有效数据');
-      }
-    } catch (error) {
-      console.error('CSV导入错误:', error);
-      alert('CSV文件读取失败，请检查文件格式');
-    } finally {
-      setIsLoading(false);
-      
-      setTimeout(() => {
-        if (status === 'success') {
+        
+        // 显示导入结果
+        const successCount = parsedLines.length;
+        const totalLines = lines.length - 1;
+        alert(`成功导入 ${successCount} 首歌曲（共 ${totalLines} 行数据）`);
+        
+        // 成功后自动关闭
+        setTimeout(() => {
           setStatus('idle');
           setText('');
           onClose();
-        }
+        }, 1500);
+      } else {
+        alert('CSV文件格式不正确或没有有效数据');
+        
+        // 无数据时也自动关闭
+        setTimeout(() => {
+          setStatus('idle');
+          setText('');
+          onClose();
+        }, 1500);
+      }
+    } catch (error: any) {
+      console.error('CSV导入错误:', error);
+      alert(`导入失败: ${error.message}`);
+      
+      // 失败后自动关闭
+      setTimeout(() => {
+        setStatus('idle');
+        setText('');
+        onClose();
       }, 1500);
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -93,21 +169,33 @@ const ImportModal: React.FC<ImportModalProps> = ({ isOpen, onClose, onImport }) 
     const result: string[] = [];
     let current = '';
     let inQuotes = false;
+    let escaped = false;
     
     for (let i = 0; i < line.length; i++) {
       const char = line[i];
       
-      if (char === '"') {
-        inQuotes = !inQuotes;
+      if (escaped) {
+        current += char;
+        escaped = false;
+      } else if (char === '\\') {
+        escaped = true;
+      } else if (char === '"') {
+        // 处理双引号："" 表示一个引号字符
+        if (i + 1 < line.length && line[i + 1] === '"') {
+          current += '"';
+          i++; // 跳过下一个引号
+        } else {
+          inQuotes = !inQuotes;
+        }
       } else if (char === ',' && !inQuotes) {
-        result.push(current);
+        result.push(current.trim());
         current = '';
       } else {
         current += char;
       }
     }
     
-    result.push(current);
+    result.push(current.trim());
     return result;
   };
 
@@ -187,6 +275,7 @@ const ImportModal: React.FC<ImportModalProps> = ({ isOpen, onClose, onImport }) 
                    <p className="font-semibold">格式说明</p>
                    <p>请在下方粘贴您的列表，每行格式如下：</p>
                    <code className="bg-white px-2 py-0.5 rounded border border-blue-200 text-xs mt-1 block w-fit">歌曲名 - 歌手名</code>
+                   <p className="mt-2 text-xs">CSV文件支持的字段：ID,歌名,歌手,专辑,图片URL,发行日期,添加时间</p>
                  </div>
               </div>
 

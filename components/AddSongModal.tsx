@@ -34,9 +34,9 @@ export const AddSongModal: React.FC<AddSongModalProps> = ({ isOpen, onClose, onA
   const [isSearching, setIsSearching] = useState(false);
   const [selectedSong, setSelectedSong] = useState<SearchResult | null>(null);
   const [showSearchResults, setShowSearchResults] = useState(false);
-  const [activeTab, setActiveTab] = useState<'search' | 'manual'>('search');
+  const [activeTab, setActiveTab] = useState<'search' | 'manual'>('manual'); // 默认切换到手动输入
   const [searchError, setSearchError] = useState(''); // 搜索平台状态
-  const [searchPlatform, setSearchPlatform] = useState<'itunes' | 'itunes-intl'>('itunes'); // 搜索平台选择
+  const [searchPlatform, setSearchPlatform] = useState<'itunes-domestic' | 'itunes-international'>('itunes-domestic'); // 搜索平台选择
 
   // 重置状态
   useEffect(() => {
@@ -48,7 +48,7 @@ export const AddSongModal: React.FC<AddSongModalProps> = ({ isOpen, onClose, onA
       setSearchResults([]);
       setSelectedSong(null);
       setShowSearchResults(false);
-      setActiveTab('search');
+      setActiveTab('manual'); // 默认切换到手动输入
       setSearchError(''); // 重置搜索错误
     }
   }, [isOpen]);
@@ -159,7 +159,7 @@ export const AddSongModal: React.FC<AddSongModalProps> = ({ isOpen, onClose, onA
         // 先尝试国内版搜索
         const domesticResults = await musicApi.search({
           keyword: `${title} ${artist}`,
-          apiType: 'itunes',
+          apiType: 'itunes-domestic',
           limit: 5
         });
         
@@ -180,7 +180,7 @@ export const AddSongModal: React.FC<AddSongModalProps> = ({ isOpen, onClose, onA
           // 国内版没有完全匹配，使用国际版第一首歌的数据
           const internationalResults = await musicApi.search({
             keyword: `${title} ${artist}`,
-            apiType: 'itunes-intl',
+            apiType: 'itunes-international',
             limit: 1
           });
           
@@ -239,16 +239,6 @@ export const AddSongModal: React.FC<AddSongModalProps> = ({ isOpen, onClose, onA
         {/* 标签页切换 */}
         <div className="flex border-b border-gray-200 bg-gray-50">
           <button
-            onClick={() => setActiveTab('search')}
-            className={`flex-1 py-3 text-sm font-medium transition-colors ${
-              activeTab === 'search' 
-                ? 'text-brand-light border-b-2 border-brand-light' 
-                : 'text-gray-500 hover:text-gray-700'
-            }`}
-          >
-            智能搜索
-          </button>
-          <button
             onClick={() => setActiveTab('manual')}
             className={`flex-1 py-3 text-sm font-medium transition-colors ${
               activeTab === 'manual' 
@@ -257,6 +247,16 @@ export const AddSongModal: React.FC<AddSongModalProps> = ({ isOpen, onClose, onA
             }`}
           >
             手动输入
+          </button>
+          <button
+            onClick={() => setActiveTab('search')}
+            className={`flex-1 py-3 text-sm font-medium transition-colors ${
+              activeTab === 'search' 
+                ? 'text-brand-light border-b-2 border-brand-light' 
+                : 'text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            智能搜索
           </button>
         </div>
 
@@ -273,29 +273,29 @@ export const AddSongModal: React.FC<AddSongModalProps> = ({ isOpen, onClose, onA
                     {/* 主要API平台选择 */}
                     <div className="grid grid-cols-2 gap-2">
                       <button
-                        type="button"
-                        onClick={() => setSearchPlatform('itunes')}
-                        className={`py-2 px-3 text-xs font-medium rounded-md transition-colors ${
-                          searchPlatform === 'itunes' 
-                            ? 'bg-brand-light text-white' 
-                            : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                        }`}
-                      >
-                        苹果音乐
-                        <div className="text-xs opacity-80 mt-1">国内版</div>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setSearchPlatform('itunes-intl')}
-                        className={`py-2 px-3 text-xs font-medium rounded-md transition-colors ${
-                          searchPlatform === 'itunes-intl' 
-                            ? 'bg-brand-light text-white' 
-                            : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                        }`}
-                      >
-                        苹果音乐
-                        <div className="text-xs opacity-80 mt-1">国际版</div>
-                      </button>
+                    type="button"
+                    onClick={() => setSearchPlatform('itunes-domestic')}
+                    className={`py-2 px-3 text-xs font-medium rounded-md transition-colors ${
+                      searchPlatform === 'itunes-domestic' 
+                        ? 'bg-brand-light text-white' 
+                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                    }`}
+                  >
+                    苹果音乐
+                    <div className="text-xs opacity-80 mt-1">国内版</div>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSearchPlatform('itunes-international')}
+                    className={`py-2 px-3 text-xs font-medium rounded-md transition-colors ${
+                      searchPlatform === 'itunes-international' 
+                        ? 'bg-brand-light text-white' 
+                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                    }`}
+                  >
+                    苹果音乐
+                    <div className="text-xs opacity-80 mt-1">国际版</div>
+                  </button>
                     </div>
                     
 
@@ -369,8 +369,8 @@ export const AddSongModal: React.FC<AddSongModalProps> = ({ isOpen, onClose, onA
                       {song.name} · <span className="text-blue-600">{song.artist}</span>
                     </div>
                     <span className="text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full">
-                      {searchPlatform === 'itunes' ? 'Apple Music' : 
-                       searchPlatform === 'itunes-intl' ? 'iTunes国际版' : '未知平台'}
+                      {searchPlatform === 'itunes-domestic' ? 'Apple Music' : 
+                       searchPlatform === 'itunes-international' ? 'iTunes国际版' : '未知平台'}
                     </span>
                   </div>
                   <div className={`text-xs truncate ${song.album.includes('未知专辑') || song.album.includes('单曲') ? 'text-gray-400 italic' : 'text-slate-500'}`}>

@@ -82,11 +82,11 @@ const App: React.FC = () => {
     if (!coverUrl || !releaseDate) {
       try {
         // 先尝试国内版搜索
-        const domesticResults = await musicApi.search({
-          keyword: `${title} ${artists.join(' ')}`,
-          apiType: 'itunes',
-          limit: 5
-        });
+                  const domesticResults = await musicApi.search({
+                    keyword: `${title} ${artists.join(' ')}`,
+                    apiType: 'itunes-domestic',
+                    limit: 5
+                  });
         
         // 严格匹配：歌名和歌手都需要匹配
         const matchedSong = domesticResults.find(song => {
@@ -105,7 +105,7 @@ const App: React.FC = () => {
           // 国内版没有完全匹配，使用国际版第一首歌的数据
           const internationalResults = await musicApi.search({
             keyword: `${title} ${artists.join(' ')}`,
-            apiType: 'itunes-intl',
+            apiType: 'itunes-international',
             limit: 1
           });
           
@@ -140,89 +140,230 @@ const App: React.FC = () => {
 
   const handleBulkImport = async (lines: string[], enableSmartMatch: boolean = true) => {
     const newSongs: Song[] = [];
+    const importErrors: string[] = [];
     
     // 延迟函数
     const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
     
+    // 去重检查
+    const existingSongs = new Set();
+    if (songs.length > 0) {
+      songs.forEach(song => {
+        existingSongs.add(`${song.title.toLowerCase()}|||${song.artists.join(',').toLowerCase()}`);
+      });
+    }
+    
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i];
-      const parts = line.split('-').map(s => s.trim());
-      if (parts.length >= 2) {
-        const title = parts[0];
-        const artist = parts[1];
-        // 将歌手字符串分割为数组，支持逗号、顿号、斜杠分隔
-        const artists = artist.split(/[,，、\/]/).map(a => a.trim()).filter(a => a.length > 0);
-        
-        let coverUrl = '';
-        let matchedAlbum = '';
-        let releaseDate: string | undefined = undefined;
-        
-        if (enableSmartMatch) {
-          // 智能匹配歌曲信息：先尝试国内版，如果没有完全匹配就使用国际版第一首歌
+      
+      try {
+        // 检查是否是JSON格式（用于新的CSV导入）
+        if (line.startsWith('{') && line.endsWith('}')) {
+          // 新的CSV导入格式：JSON字符串
           try {
-            // 添加API调用延迟，避免频繁请求
-            await delay(300);
+            const songInfo = JSON.parse(line);
             
-            // 先尝试国内版搜索
-            const domesticResults = await musicApi.search({
-              keyword: `${title} ${artists.join(' ')}`,
-              apiType: 'itunes',
-              limit: 5
-            });
-            
-            // 严格匹配：歌名和歌手都需要匹配
-            const matchedSong = domesticResults.find(song => {
-              const songNameMatch = song.name.toLowerCase().includes(title.toLowerCase());
-              const artistMatch = song.artist.toLowerCase().includes(artists.join(' ').toLowerCase());
-              return songNameMatch && artistMatch;
-            });
-            
-            if (matchedSong) {
-              // 使用国内版完全匹配到的歌曲信息
-              coverUrl = matchedSong.coverUrl || '';
-              matchedAlbum = matchedSong.album;
-              releaseDate = matchedSong.releaseDate;
-              console.log(`[${i+1}/${lines.length}] 使用国内版完全匹配到的歌曲信息`);
-            } else {
-              // 国内版没有完全匹配，使用国际版第一首歌的数据
-              const internationalResults = await musicApi.search({
-                keyword: `${title} ${artists.join(' ')}`,
-                apiType: 'itunes-intl',
-                limit: 1
-              });
+            if (songInfo.title && songInfo.artist) {
+              // 将歌手字符串分割为数组，支持逗号、顿号、斜杠分隔
+              const artists = songInfo.artist.split(/[,，、\/]/).map((a: string) => a.trim()).filter((a: string) => a.length > 0);
               
-              if (internationalResults.length > 0) {
-                // 使用国际版第一首歌的信息
-                const internationalSong = internationalResults[0];
-                coverUrl = internationalSong.coverUrl || '';
-                matchedAlbum = internationalSong.album;
-                releaseDate = internationalSong.releaseDate;
-                console.log(`[${i+1}/${lines.length}] 使用国际版第一首歌的信息`);
-              } else {
-                console.log(`[${i+1}/${lines.length}] 国际版也没有找到歌曲，使用用户输入的信息`);
+              // 去重检查
+              const songKey = `${songInfo.title.toLowerCase()}|||${artists.join(',').toLowerCase()}`;
+              if (existingSongs.has(songKey)) {
+                console.warn(`[${i+1}/${lines.length}] 歌曲已存在，跳过导入: ${songInfo.title} - ${artists.join(', ')}`);
+                importErrors.push(`第${i+1}行：歌曲已存在 - ${songInfo.title}`);
+                continue;
               }
+              
+              // 创建歌曲对象，支持使用CSV中提供的添加时间
+              const newSong: Song = {
+                id: crypto.randomUUID(),
+                title: songInfo.title,
+                artists,
+                album: songInfo.album || undefined,
+                coverUrl: songInfo.coverUrl || undefined,
+                releaseDate: songInfo.releaseDate || undefined,
+                addedAt: songInfo.addedAt ? 
+                  (typeof songInfo.addedAt === 'string' ? new Date(songInfo.addedAt).getTime() : songInfo.addedAt) : 
+                  Date.now()
+              };
+              
+              // 如果启用了智能匹配且没有提供图片URL，尝试获取更多信息
+              if (enableSmartMatch && !songInfo.coverUrl) {
+                try {
+                  // 添加API调用延迟，避免频繁请求
+                  await delay(300);
+                  
+                  // 先尝试国内版搜索
+                  const domesticResults = await musicApi.search({
+                    keyword: `${songInfo.title} ${artists.join(' ')}`,
+                    apiType: 'itunes-domestic',
+                    limit: 5
+                  });
+                  
+                  // 严格匹配：歌名和歌手都需要匹配
+                  const matchedSong = domesticResults.find(song => {
+                    const songNameMatch = song.name.toLowerCase().includes(songInfo.title.toLowerCase());
+                    const artistMatch = song.artist.toLowerCase().includes(artists.join(' ').toLowerCase());
+                    return songNameMatch && artistMatch;
+                  });
+                  
+                  if (matchedSong) {
+                    // 使用国内版完全匹配到的歌曲信息
+                    if (!newSong.coverUrl) newSong.coverUrl = matchedSong.coverUrl || undefined;
+                    if (!newSong.album) newSong.album = matchedSong.album;
+                    if (!newSong.releaseDate) newSong.releaseDate = matchedSong.releaseDate;
+                    console.log(`[${i+1}/${lines.length}] 使用国内版完全匹配到的歌曲信息`);
+                  } else {
+                    // 国内版没有完全匹配，使用国际版第一首歌的数据
+                    const internationalResults = await musicApi.search({
+                      keyword: `${songInfo.title} ${artists.join(' ')}`,
+                      apiType: 'itunes-international',
+                      limit: 1
+                    });
+                    
+                    if (internationalResults.length > 0) {
+                      // 使用国际版第一首歌的信息
+                      const internationalSong = internationalResults[0];
+                      if (!newSong.coverUrl) newSong.coverUrl = internationalSong.coverUrl || undefined;
+                      if (!newSong.album) newSong.album = internationalSong.album;
+                      if (!newSong.releaseDate) newSong.releaseDate = internationalSong.releaseDate;
+                      console.log(`[${i+1}/${lines.length}] 使用国际版第一首歌的信息`);
+                    } else {
+                      console.log(`[${i+1}/${lines.length}] 国际版也没有找到歌曲，使用用户输入的信息`);
+                    }
+                  }
+                } catch (error) {
+                  console.warn(`[${i+1}/${lines.length}] 歌曲信息匹配失败，使用用户输入的信息:`, error);
+                }
+              }
+              
+              newSongs.push(newSong);
+              existingSongs.add(songKey); // 更新已存在歌曲集合
+              console.log(`[${i+1}/${lines.length}] 成功导入歌曲: ${songInfo.title} - ${artists.join(', ')}`);
             }
-          } catch (error) {
-            console.warn(`[${i+1}/${lines.length}] 歌曲信息匹配失败，使用用户输入的信息:`, error);
+          } catch (jsonError) {
+            console.error(`[${i+1}/${lines.length}] JSON解析失败:`, jsonError);
+            importErrors.push(`第${i+1}行：数据格式错误`);
+            // 继续处理其他行
           }
         } else {
-          // 不启用智能匹配，使用用户输入的基本信息
-          console.log(`[${i+1}/${lines.length}] 跳过智能匹配，使用用户输入的信息`);
+          // 传统格式：歌名 - 歌手 (专辑)
+          const parts = line.split('-').map(s => s.trim());
+          if (parts.length >= 2) {
+            let title = parts[0];
+            let artist = parts[1];
+            let matchedAlbum = '';
+            
+            // 从歌手部分提取专辑信息（如果有）
+            const albumMatch = artist.match(/\((.+?)\)$/);
+            if (albumMatch) {
+              matchedAlbum = albumMatch[1];
+              artist = artist.replace(/\((.+?)\)$/, '').trim();
+            }
+            
+            // 将歌手字符串分割为数组，支持逗号、顿号、斜杠分隔
+            const artists = artist.split(/[,，、\/]/).map(a => a.trim()).filter(a => a.length > 0);
+            
+            // 去重检查
+            const songKey = `${title.toLowerCase()}|||${artists.join(',').toLowerCase()}`;
+            if (existingSongs.has(songKey)) {
+              console.warn(`[${i+1}/${lines.length}] 歌曲已存在，跳过导入: ${title} - ${artists.join(', ')}`);
+              importErrors.push(`第${i+1}行：歌曲已存在 - ${title}`);
+              continue;
+            }
+            
+            let coverUrl = '';
+            let releaseDate: string | undefined = undefined;
+            
+            if (enableSmartMatch) {
+              // 智能匹配歌曲信息：先尝试国内版，如果没有完全匹配就使用国际版第一首歌
+              try {
+                // 添加API调用延迟，避免频繁请求
+                await delay(300);
+                
+                // 先尝试国内版搜索
+                const domesticResults = await musicApi.search({
+                    keyword: `${title} ${artists.join(' ')}`,
+                    apiType: 'itunes-domestic',
+                    limit: 5
+                  });
+                
+                // 严格匹配：歌名和歌手都需要匹配
+                const matchedSong = domesticResults.find(song => {
+                  const songNameMatch = song.name.toLowerCase().includes(title.toLowerCase());
+                  const artistMatch = song.artist.toLowerCase().includes(artists.join(' ').toLowerCase());
+                  return songNameMatch && artistMatch;
+                });
+                
+                if (matchedSong) {
+                  // 使用国内版完全匹配到的歌曲信息
+                  coverUrl = matchedSong.coverUrl || '';
+                  matchedAlbum = matchedSong.album;
+                  releaseDate = matchedSong.releaseDate;
+                  console.log(`[${i+1}/${lines.length}] 使用国内版完全匹配到的歌曲信息`);
+                } else {
+                  // 国内版没有完全匹配，使用国际版第一首歌的数据
+                  const internationalResults = await musicApi.search({
+                    keyword: `${title} ${artists.join(' ')}`,
+                    apiType: 'itunes-international',
+                    limit: 1
+                  });
+                  
+                  if (internationalResults.length > 0) {
+                    // 使用国际版第一首歌的信息
+                    const internationalSong = internationalResults[0];
+                    coverUrl = internationalSong.coverUrl || '';
+                    matchedAlbum = internationalSong.album;
+                    releaseDate = internationalSong.releaseDate;
+                    console.log(`[${i+1}/${lines.length}] 使用国际版第一首歌的信息`);
+                  } else {
+                    console.log(`[${i+1}/${lines.length}] 国际版也没有找到歌曲，使用用户输入的信息`);
+                  }
+                }
+              } catch (error) {
+                console.warn(`[${i+1}/${lines.length}] 歌曲信息匹配失败，使用用户输入的信息:`, error);
+              }
+            } else {
+              // 不启用智能匹配，使用用户输入的基本信息
+              console.log(`[${i+1}/${lines.length}] 跳过智能匹配，使用用户输入的信息`);
+            }
+            
+            // 传统格式导入不支持添加时间字段，使用当前时间
+            newSongs.push({
+              id: crypto.randomUUID(),
+              title,
+              artists,
+              coverUrl: coverUrl || undefined,
+              releaseDate: releaseDate || undefined,
+              album: matchedAlbum || undefined,
+              addedAt: Date.now()
+            });
+            
+            existingSongs.add(songKey); // 更新已存在歌曲集合
+          }
         }
-        
-        newSongs.push({
-          id: crypto.randomUUID(),
-          title,
-          artists,
-          coverUrl: coverUrl,
-          releaseDate: releaseDate,
-          album: matchedAlbum,
-          addedAt: Date.now()
-        });
+      } catch (error) {
+        console.error(`[${i+1}/${lines.length}] 处理失败:`, error);
+        importErrors.push(`第${i+1}行：处理失败`);
+        // 继续处理其他行
       }
     }
 
-    setSongs(prev => [...newSongs, ...prev]);
+    // 更新歌曲列表
+    if (newSongs.length > 0) {
+      setSongs(prev => [...newSongs, ...prev]);
+      
+      // 显示导入结果
+      const successMessage = `成功导入 ${newSongs.length} 首歌曲`;
+      if (importErrors.length > 0) {
+        alert(`${successMessage}\n\n导入失败的歌曲：\n${importErrors.slice(0, 10).join('\n')}${importErrors.length > 10 ? `\n...等${importErrors.length - 10}首歌曲` : ''}`);
+      } else {
+        console.log(successMessage);
+      }
+    } else {
+      alert('没有成功导入任何歌曲，可能是因为所有歌曲都已存在或格式错误');
+    }
   };
 
   // Navigation Handlers

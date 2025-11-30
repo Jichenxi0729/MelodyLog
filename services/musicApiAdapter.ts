@@ -2,11 +2,11 @@
 // 支持iTunes API
 
 // 默认API类型
-export const DEFAULT_API_TYPE = 'itunes' as const;
+export const DEFAULT_API_TYPE = 'itunes-domestic' as const;
 
 export const API_TYPES = {
-  itunes: 'iTunes搜索API',
-  'itunes-intl': 'iTunes国际版API'
+  'itunes-domestic': 'iTunes搜索API',
+  'itunes-international': 'iTunes国际版API'
 } as const;
 
 export interface SongInfo {
@@ -39,9 +39,9 @@ class MusicApiAdapter {
     
     try {
       switch (apiType) {
-        case 'itunes':
+        case 'itunes-domestic':
           return await this.searchWithItunes(params, 'CN');
-        case 'itunes-intl':
+        case 'itunes-international':
           return await this.searchWithItunes(params, 'US');
         default:
           throw new Error(`不支持的API类型: ${apiType}`);
@@ -51,7 +51,7 @@ class MusicApiAdapter {
       
       // 如果默认API失败，尝试回退到其他API
       if (apiType === DEFAULT_API_TYPE) {
-        const fallbackApis: (keyof typeof API_TYPES)[] = ['itunes-intl'];
+        const fallbackApis: (keyof typeof API_TYPES)[] = ['itunes-international'];
         
         for (const fallbackApi of fallbackApis) {
           if (fallbackApi !== apiType) {
@@ -102,8 +102,8 @@ class MusicApiAdapter {
           duration: Math.floor(song.trackTimeMillis / 1000),
           coverUrl: song.artworkUrl100?.replace('100x100', '300x300'),
           releaseDate: song.releaseDate, // 添加发行日期
-          platform: country === 'CN' ? 'itunes' : 'itunes-intl',
-          platformName: country === 'CN' ? 'Apple Music' : 'iTunes国际版'
+          platform: country === 'CN' ? 'itunes-domestic' : 'itunes-international',
+          platformName: country === 'CN' ? API_TYPES['itunes-domestic'] : API_TYPES['itunes-international']
         }));
       } else {
         return [];
@@ -216,8 +216,8 @@ class MusicApiAdapter {
   // 获取平台名称
   private getPlatformName(platform: string): string {
     const platformMap: Record<string, string> = {
-      'itunes': 'Apple Music',
-      'itunes-intl': 'iTunes国际版'
+      'itunes-domestic': 'Apple Music',
+      'itunes-international': 'iTunes国际版'
     };
     
     return platformMap[platform] || platform;
