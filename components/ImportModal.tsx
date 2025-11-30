@@ -238,19 +238,21 @@ const ImportModal: React.FC<ImportModalProps> = ({ isOpen, onClose, onImport }) 
                 <p className="text-gray-600 mb-2">拖拽CSV文件到此处，或点击选择文件</p>
                 <input
                   type="file"
-                  accept=".csv"
+                  accept=".csv,.txt"
                   onChange={handleFileChange}
                   disabled={isLoading || status === 'success'}
                   className="hidden"
                   id="csv-file-input"
+                  multiple={false}
                 />
                 <label
                   htmlFor="csv-file-input"
-                  className={`inline-block px-6 py-2 rounded-lg font-medium cursor-pointer transition-colors ${
+                  className={`inline-block px-8 py-3 rounded-lg font-medium cursor-pointer transition-colors active:scale-95 ${
                     isLoading || status === 'success'
                       ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
                       : 'bg-brand-light hover:bg-blue-500 text-white shadow-blue-500/30'
                   }`}
+                  style={{ touchAction: 'manipulation' }}
                 >
                   {isLoading ? '处理中...' : status === 'success' ? '导入成功' : '选择CSV文件'}
                 </label>
