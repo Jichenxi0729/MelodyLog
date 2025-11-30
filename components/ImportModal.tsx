@@ -233,29 +233,26 @@ const ImportModal: React.FC<ImportModalProps> = ({ isOpen, onClose, onImport }) 
                  </div>
               </div>
 
-              <div className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center hover:border-brand-light transition-colors">
+              <div className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center hover:border-brand-light transition-colors cursor-pointer" onClick={() => document.getElementById('csv-file-input')?.click()} style={{ touchAction: 'manipulation' }}>
                 <FileUp className="mx-auto text-gray-400 mb-3" size={48} />
                 <p className="text-gray-600 mb-2">拖拽CSV文件到此处，或点击选择文件</p>
                 <input
                   type="file"
-                  accept=".csv,.txt"
+                  accept=".csv,.txt,text/csv,text/plain"
                   onChange={handleFileChange}
                   disabled={isLoading || status === 'success'}
-                  className="hidden"
+                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
                   id="csv-file-input"
                   multiple={false}
+                  style={{ touchAction: 'manipulation' }}
                 />
-                <label
-                  htmlFor="csv-file-input"
-                  className={`inline-block px-8 py-3 rounded-lg font-medium cursor-pointer transition-colors active:scale-95 ${
+                <div className={`relative inline-block px-8 py-3 rounded-lg font-medium cursor-pointer transition-colors active:scale-95 ${
                     isLoading || status === 'success'
                       ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
                       : 'bg-brand-light hover:bg-blue-500 text-white shadow-blue-500/30'
-                  }`}
-                  style={{ touchAction: 'manipulation' }}
-                >
-                  {isLoading ? '处理中...' : status === 'success' ? '导入成功' : '选择CSV文件'}
-                </label>
+                  }`}>
+                  <span>{isLoading ? '处理中...' : status === 'success' ? '导入成功' : '选择CSV文件'}</span>
+                </div>
                 <p className="text-xs text-gray-500 mt-2">支持.csv格式文件</p>
               </div>
 
