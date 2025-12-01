@@ -11,7 +11,7 @@ export interface Song {
 
 export type SortOption = 'newest' | 'oldest' | 'artist';
 
-export type ViewType = 'HOME' | 'ARTISTS' | 'ARTIST_DETAIL' | 'ALBUM_DETAIL' | 'SONG_DETAIL';
+export type ViewType = 'HOME' | 'ARTISTS' | 'ALBUMS' | 'MY_PAGE' | 'ARTIST_DETAIL' | 'ALBUM_DETAIL' | 'SONG_DETAIL';
 
 export interface ViewState {
   type: ViewType;

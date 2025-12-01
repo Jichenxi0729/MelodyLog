@@ -1,13 +1,15 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Plus, Search, Music2, UploadCloud, Home, Users, Download } from 'lucide-react';
+import { Plus, Search, Music2, UploadCloud, Home, Users, Download, User } from 'lucide-react';
 import { Song, ViewState } from './types';
 import { SongCard } from './components/SongCard';
 import { AddSongModal } from './components/AddSongModal';
 import ImportModal from './components/ImportModal';
 import { ArtistLibrary } from './components/ArtistLibrary';
+import { AlbumLibrary } from './components/AlbumLibrary';
 import { ArtistDetail } from './components/ArtistDetail';
 import { AlbumDetail } from './components/AlbumDetail';
 import { SongDetail } from './components/SongDetail';
+import MyPage from './components/MyPage';
 import { musicApi } from './services/musicApiAdapter';
 import { exportSongsToCSV } from './utils/csvExporter';
 
@@ -26,6 +28,13 @@ const App: React.FC = () => {
   // Modals
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  
+  // Sorting
+  const [sortConfig, setSortConfig] = useState<{
+    key: 'addedAt' | 'title' | 'releaseDate';
+    direction: 'asc' | 'desc';
+  }>({ key: 'addedAt', direction: 'desc' });
+  const [isSortMenuOpen, setIsSortMenuOpen] = useState(false);
 
   // Initialize from LocalStorage
   useEffect(() => {
@@ -44,7 +53,7 @@ const App: React.FC = () => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(songs));
   }, [songs]);
 
-  // Filtered Songs (Only for Home View Search)
+  // Filtered and Sorted Songs (Only for Home View)
   const filteredHomeSongs = useMemo(() => {
     let result = songs;
 
@@ -57,9 +66,32 @@ const App: React.FC = () => {
       );
     }
 
-    // Default sort: Newest first
-    return result.sort((a, b) => b.addedAt - a.addedAt);
-  }, [songs, searchQuery]);
+    // Sort based on selected configuration
+    switch (sortConfig.key) {
+      case 'title':
+        return result.sort((a, b) => {
+          const comparison = a.title.localeCompare(b.title);
+          return sortConfig.direction === 'asc' ? comparison : -comparison;
+        });
+      case 'releaseDate':
+        // Sort by release date, with songs without date at the end
+        return result.sort((a, b) => {
+          if (!a.releaseDate && !b.releaseDate) return 0;
+          if (!a.releaseDate) return sortConfig.direction === 'asc' ? 1 : -1;
+          if (!b.releaseDate) return sortConfig.direction === 'asc' ? -1 : 1;
+          
+          const dateA = new Date(a.releaseDate).getTime();
+          const dateB = new Date(b.releaseDate).getTime();
+          return sortConfig.direction === 'asc' ? dateA - dateB : dateB - dateA;
+        });
+      case 'addedAt':
+      default:
+        // Sort by added date with direction
+        return result.sort((a, b) => {
+          return sortConfig.direction === 'asc' ? a.addedAt - b.addedAt : b.addedAt - a.addedAt;
+        });
+    }
+  }, [songs, searchQuery, sortConfig]);
 
   // Handlers
   const handleDeleteSong = (songId: string) => {
@@ -416,6 +448,14 @@ const App: React.FC = () => {
     navigateTo({ type: 'ARTISTS' });
   };
 
+  const navigateToAlbums = () => {
+    navigateTo({ type: 'ALBUMS' });
+  };
+
+  const navigateToMyPage = () => {
+    navigateTo({ type: 'MY_PAGE' });
+  };
+
   const navigateToArtistDetail = (artist: string) => {
     navigateTo({ type: 'ARTIST_DETAIL', data: artist });
   };
@@ -428,20 +468,29 @@ const App: React.FC = () => {
     navigateTo({ type: 'SONG_DETAIL', data: songId });
   };
 
+  // Random Roam Function
+  const handleRandomRoam = () => {
+    if (songs.length > 0) {
+      const randomIndex = Math.floor(Math.random() * songs.length);
+      const randomSong = songs[randomIndex];
+      navigateToSongDetail(randomSong.id);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-white text-slate-800">
       {/* Header - Only show on HOME page */}
       {view.type === 'HOME' && (
         <header className="sticky top-0 z-50 bg-white border-b border-slate-100 shadow-sm">
           <div className="max-w-3xl mx-auto px-4 py-3">
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between flex-wrap gap-2">
               <div className="flex items-center gap-2">
                 <Music2 className="text-brand-light" size={24} />
                 <h1 className="text-xl font-bold text-slate-800">音想</h1>
               </div>
               
-              {/* Search Bar */}
-              <div className="relative flex-1 max-w-md mx-4">
+              {/* Search Bar with Import/Export Buttons */}
+              <div className="relative flex-1 max-w-md mx-4 flex items-center">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400" size={18} />
                 <input
                   type="text"
@@ -452,24 +501,7 @@ const App: React.FC = () => {
                 />
               </div>
               
-              {/* Desktop Import/Export */}
-              <div className="hidden md:flex items-center gap-2">
-                <button
-                  onClick={() => setIsImportModalOpen(true)}
-                  className="text-slate-600 hover:text-brand-light transition-colors text-sm font-medium flex items-center gap-1"
-                >
-                  <UploadCloud size={16} />
-                  <span>导入</span>
-                </button>
-                <button
-                  onClick={() => exportSongsToCSV(songs)}
-                  className="text-slate-600 hover:text-brand-light transition-colors text-sm font-medium flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed"
-                  disabled={songs.length === 0}
-                >
-                  <Download size={16} />
-                  <span>导出</span>
-                </button>
-              </div>
+              {/* No import/export buttons here - moved to My Page */}
             </div>
           </div>
         </header>
@@ -477,25 +509,109 @@ const App: React.FC = () => {
 
       {/* Main Content */}
       <main className="max-w-3xl mx-auto px-4 pb-24 pt-4">
-        {/* Breadcrumb - Only show for ARTISTS page (ArtistLibrary doesn't have back button) */}
-        {navigationHistory.length > 1 && view.type === 'ARTISTS' && (
-          <div className="mb-4">
-            <button
-              onClick={navigateBack}
-              className="text-sm text-slate-500 hover:text-brand-light transition-colors flex items-center gap-1"
-            >
-              ← 返回
-            </button>
-          </div>
-        )}
+        {/* Breadcrumb - Removed back button from ARTISTS page as requested */}
         
         {/* VIEW: HOME */}
         {view.type === 'HOME' && (
           <div className="space-y-3 animate-in fade-in duration-300">
              <div className="flex items-center justify-between px-1">
-                <h2 className="text-base font-bold text-slate-800">最近添加</h2>
-                <div className="flex items-center gap-2 text-slate-400 text-xs">
-                    <Music2 size={14} />
+                <div className="flex items-center gap-1">
+                    <h2 className="text-base font-bold text-slate-800">最近添加</h2>
+                    
+                    {/* Sort Button with Dropdown */}
+                    <div className="relative">
+                      <button
+                        onClick={() => setIsSortMenuOpen(!isSortMenuOpen)}
+                        className="flex items-center justify-center w-7 h-7 text-slate-600 hover:text-brand-light transition-colors rounded-lg hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-brand-light/20"
+                        title="排序选项"
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M8 6h12M8 12h12M8 18h12M1 6h3M1 12h3M1 18h3" />
+                        </svg>
+                      </button>
+                      
+                      {/* Sort Dropdown Menu with explicit options */}
+                      {isSortMenuOpen && (
+                        <div className="absolute left-0 mt-1 w-48 bg-white border border-slate-200 rounded-lg shadow-lg py-1 z-50">
+                          {/* Title Sorting Options */}
+                          <div className="px-2 py-1 text-xs font-semibold text-slate-500 border-b border-slate-100">标题</div>
+                          <button
+                            onClick={() => {
+                              setSortConfig({ key: 'title', direction: 'asc' });
+                              setIsSortMenuOpen(false);
+                            }}
+                            className={`block w-full text-left px-4 py-2 text-sm ${sortConfig.key === 'title' && sortConfig.direction === 'asc' ? 'bg-brand-light/10 text-brand-light font-medium' : 'text-slate-700 hover:bg-slate-50'}`}
+                          >
+                            A-Z 升序
+                          </button>
+                          <button
+                            onClick={() => {
+                              setSortConfig({ key: 'title', direction: 'desc' });
+                              setIsSortMenuOpen(false);
+                            }}
+                            className={`block w-full text-left px-4 py-2 text-sm ${sortConfig.key === 'title' && sortConfig.direction === 'desc' ? 'bg-brand-light/10 text-brand-light font-medium' : 'text-slate-700 hover:bg-slate-50'}`}
+                          >
+                            Z-A 降序
+                          </button>
+                          
+                          {/* Year Sorting Options */}
+                          <div className="px-2 py-1 text-xs font-semibold text-slate-500 border-t border-b border-slate-100 mt-1">年份</div>
+                          <button
+                            onClick={() => {
+                              setSortConfig({ key: 'releaseDate', direction: 'asc' });
+                              setIsSortMenuOpen(false);
+                            }}
+                            className={`block w-full text-left px-4 py-2 text-sm ${sortConfig.key === 'releaseDate' && sortConfig.direction === 'asc' ? 'bg-brand-light/10 text-brand-light font-medium' : 'text-slate-700 hover:bg-slate-50'}`}
+                          >
+                            年份升序
+                          </button>
+                          <button
+                            onClick={() => {
+                              setSortConfig({ key: 'releaseDate', direction: 'desc' });
+                              setIsSortMenuOpen(false);
+                            }}
+                            className={`block w-full text-left px-4 py-2 text-sm ${sortConfig.key === 'releaseDate' && sortConfig.direction === 'desc' ? 'bg-brand-light/10 text-brand-light font-medium' : 'text-slate-700 hover:bg-slate-50'}`}
+                          >
+                            年份降序
+                          </button>
+                          
+                          {/* Added Date Sorting Options */}
+                          <div className="px-2 py-1 text-xs font-semibold text-slate-500 border-t border-b border-slate-100 mt-1">添加时间</div>
+                          <button
+                            onClick={() => {
+                              setSortConfig({ key: 'addedAt', direction: 'asc' });
+                              setIsSortMenuOpen(false);
+                            }}
+                            className={`block w-full text-left px-4 py-2 text-sm ${sortConfig.key === 'addedAt' && sortConfig.direction === 'asc' ? 'bg-brand-light/10 text-brand-light font-medium' : 'text-slate-700 hover:bg-slate-50'}`}
+                          >
+                            添加时间升序
+                          </button>
+                          <button
+                            onClick={() => {
+                              setSortConfig({ key: 'addedAt', direction: 'desc' });
+                              setIsSortMenuOpen(false);
+                            }}
+                            className={`block w-full text-left px-4 py-2 text-sm ${sortConfig.key === 'addedAt' && sortConfig.direction === 'desc' ? 'bg-brand-light/10 text-brand-light font-medium' : 'text-slate-700 hover:bg-slate-50'}`}
+                          >
+                            添加时间降序
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                </div>
+                
+                {/* Song Count with Random Roam */}
+                <div className="flex items-center gap-1 text-slate-400 text-xs">
+                    <button
+                      onClick={handleRandomRoam}
+                      className="text-slate-400 hover:text-brand-light transition-colors focus:outline-none focus:ring-2 focus:ring-brand-light/20 p-1 rounded"
+                      title="随机漫游"
+                      disabled={songs.length === 0}
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M12 2v6m0 12v2M2 12h6m12 0h2M2 12l3.5-3.5m11.5 3.5-3.5-3.5M2 12l3.5 3.5m11.5-3.5-3.5 3.5" />
+                      </svg>
+                    </button>
                     <span>{filteredHomeSongs.length} 条记录</span>
                 </div>
             </div>
@@ -543,6 +659,23 @@ const App: React.FC = () => {
             />
         )}
 
+        {/* VIEW: ALBUM LIBRARY */}
+        {view.type === 'ALBUMS' && (
+            <AlbumLibrary 
+                songs={songs} 
+                onSelectAlbum={navigateToAlbumDetail} 
+            />
+        )}
+
+        {/* VIEW: MY PAGE */}
+        {view.type === 'MY_PAGE' && (
+            <MyPage 
+                songs={songs} 
+                onImport={() => setIsImportModalOpen(true)}
+                onExport={() => exportSongsToCSV(songs)}
+            />
+        )}
+
         {/* VIEW: ARTIST DETAIL */}
         {view.type === 'ARTIST_DETAIL' && view.data && (
             <ArtistDetail 
@@ -582,83 +715,74 @@ const App: React.FC = () => {
       </main>
 
       {/* Bottom Navigation Bar - Smaller size */}
-      <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-100 z-50 shadow-lg">
-        <div className="max-w-3xl mx-auto px-4 py-1">
-          <div className="flex justify-around items-center">
-            {/* Home Button */}
-            <button
-              onClick={navigateToHome}
-              className={`flex flex-col items-center justify-center w-12 h-12 rounded-xl transition-all duration-200 ${
-                view.type === 'HOME' 
-                  ? 'bg-brand-light/10 text-brand-light' 
-                  : 'text-slate-500 hover:text-brand-light hover:bg-slate-50'
-              }`}
-            >
-              <Home size={18} className="mb-0.5" />
-              <span className="text-xs font-medium">首页</span>
-            </button>
+        <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-100 z-50 shadow-lg">
+          <div className="max-w-3xl mx-auto px-4 py-1">
+            <div className="flex justify-around items-center">
+              {/* Home Button */}
+              <button
+                onClick={navigateToHome}
+                className={`flex flex-col items-center justify-center w-12 h-12 rounded-xl mx-0.5 transition-all duration-200 ${
+                  view.type === 'HOME' 
+                    ? 'bg-brand-light/10 text-brand-light' 
+                    : 'text-slate-500 hover:text-brand-light hover:bg-slate-50'
+                }`}
+              >
+                <Home size={18} className="mb-0.5" />
+                <span className="text-xs font-medium">首页</span>
+              </button>
 
-            {/* Add Button - Smaller */}
-            <button
-              onClick={() => setIsAddModalOpen(true)}
-              className="flex items-center justify-center w-10 h-10 rounded-xl bg-gradient-to-r from-brand-light to-blue-500 text-white shadow-lg hover:shadow-xl transition-all duration-200"
-            >
-              <Plus size={20} strokeWidth={3} />
-            </button>
+              {/* Artists Button */}
+              <button
+                onClick={navigateToArtists}
+                className={`flex flex-col items-center justify-center w-12 h-12 rounded-xl mx-0.5 transition-all duration-200 ${
+                  view.type === 'ARTISTS' 
+                    ? 'bg-brand-light/10 text-brand-light' 
+                    : 'text-slate-500 hover:text-brand-light hover:bg-slate-50'
+                }`}
+              >
+                <Users size={18} className="mb-0.5" />
+                <span className="text-xs font-medium">歌手库</span>
+              </button>
 
-            {/* Artists Button */}
-            <button
-              onClick={navigateToArtists}
-              className={`flex flex-col items-center justify-center w-12 h-12 rounded-xl transition-all duration-200 ${
-                view.type === 'ARTISTS' 
-                  ? 'bg-brand-light/10 text-brand-light' 
-                  : 'text-slate-500 hover:text-brand-light hover:bg-slate-50'
-              }`}
-            >
-              <Users size={18} className="mb-0.5" />
-              <span className="text-xs font-medium">歌手库</span>
-            </button>
-          </div>
+              {/* Add Button - Center position, no text, dark blue background, smaller button, larger plus icon */}
+              <button
+                onClick={() => setIsAddModalOpen(true)}
+                className="flex items-center justify-center w-10 h-10 rounded-xl mx-0.5 transition-all duration-200 bg-blue-600 text-white hover:bg-blue-700"
+                aria-label="添加音乐"
+              >
+                <Plus size={24} strokeWidth={3} />
+              </button>
+
+              {/* Albums Button */}
+              <button
+                onClick={navigateToAlbums}
+                className={`flex flex-col items-center justify-center w-12 h-12 rounded-xl mx-0.5 transition-all duration-200 ${
+                  view.type === 'ALBUMS' 
+                    ? 'bg-brand-light/10 text-brand-light' 
+                    : 'text-slate-500 hover:text-brand-light hover:bg-slate-50'
+                }`}
+              >
+                <Music2 size={18} className="mb-0.5" />
+                <span className="text-xs font-medium">专辑库</span>
+              </button>
+
+              {/* My Page Button */}
+              <button
+                onClick={navigateToMyPage}
+                className={`flex flex-col items-center justify-center w-12 h-12 rounded-xl mx-0.5 transition-all duration-200 ${
+                  view.type === 'MY_PAGE' 
+                    ? 'bg-brand-light/10 text-brand-light' 
+                    : 'text-slate-500 hover:text-brand-light hover:bg-slate-50'
+                }`}
+              >
+                <User size={18} className="mb-0.5" />
+                <span className="text-xs font-medium">我的</span>
+              </button>
+            </div>
         </div>
       </div>
 
-      {/* Desktop Action Buttons - Hide on mobile */}
-      <div className="hidden md:flex fixed bottom-6 right-6 z-40 gap-2">
-        <button 
-          onClick={() => setIsImportModalOpen(true)}
-          className="bg-white text-slate-700 p-2 rounded-full shadow-lg border border-slate-200 hover:bg-slate-50 transition-colors"
-          aria-label="导入"
-        >
-          <UploadCloud size={20} />
-        </button>
-        <button
-          onClick={() => exportSongsToCSV(songs)}
-          className="bg-white text-slate-700 p-2 rounded-full shadow-lg border border-slate-200 hover:bg-slate-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-          aria-label="导出CSV"
-          disabled={songs.length === 0}
-        >
-          <Download size={20} />
-        </button>
-      </div>
-
-      {/* Mobile Action Buttons - Show on mobile */}
-      <div className="md:hidden flex fixed bottom-20 right-4 z-40 gap-2">
-        <button
-          onClick={() => setIsImportModalOpen(true)}
-          className="bg-white text-slate-700 p-3 rounded-full shadow-lg border border-slate-200 hover:bg-slate-50 transition-colors"
-          aria-label="导入"
-        >
-          <UploadCloud size={20} />
-        </button>
-        <button
-          onClick={() => exportSongsToCSV(songs)}
-          className="bg-white text-slate-700 p-3 rounded-full shadow-lg border border-slate-200 hover:bg-slate-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-          aria-label="导出CSV"
-          disabled={songs.length === 0}
-        >
-          <Download size={20} />
-        </button>
-      </div>
+      {/* Floating Action Button - Removed, now integrated into navigation bar */}
 
       {/* Modals */}
       <AddSongModal 
