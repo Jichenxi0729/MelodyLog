@@ -37,7 +37,11 @@ npm run deploy:setup
 # .env.local 文件示例
 PORT=3000
 GEMINI_API_KEY=your_gemini_api_key_here
+VITE_SUPABASE_URL=your_supabase_url_here
+VITE_SUPABASE_ANON_KEY=your_supabase_anon_key_here
 ```
+
+> 注意：`.env.local` 文件包含敏感信息（如 API 密钥），不应提交到版本控制系统（它已被 `.gitignore` 排除）。在部署到 Netlify 或其他云平台时，需要手动配置这些环境变量。
 
 ## 构建与部署
 
@@ -90,7 +94,25 @@ PM2 可以确保应用在后台持续运行，并在崩溃时自动重启。
    pm2 save
    ```
 
-### 方法三：使用 Docker 容器化部署
+### 方法三：使用 Netlify 部署
+
+1. **在 Netlify 上配置环境变量**：
+   - 登录 Netlify 控制台，选择你的站点
+   - 进入 "Site settings" -> "Environment variables"
+   - 点击 "Add a variable" 添加以下环境变量：
+     - `VITE_SUPABASE_URL`: 你的 Supabase 项目 URL
+     - `VITE_SUPABASE_ANON_KEY`: 你的 Supabase 匿名密钥
+     - `GEMINI_API_KEY`: 你的 Gemini API 密钥（如果使用）
+   - 确保变量名称与 `.env.local` 中的完全一致（包括 `VITE_` 前缀）
+
+2. **部署站点**：
+   - 将代码推送到 GitHub 仓库
+   - 在 Netlify 中连接你的 GitHub 仓库
+   - 配置构建命令：`npm run build`
+   - 配置发布目录：`dist`
+   - 点击 "Deploy site"
+
+### 方法四：使用 Docker 容器化部署
 
 创建 Dockerfile：
 
@@ -133,6 +155,19 @@ docker run -p 3000:3000 --env-file .env.local melodylog
 ### API 密钥问题
 
 确保 `GEMINI_API_KEY` 环境变量已正确设置，这对于获取音乐元数据是必要的。
+
+### Supabase URL 或密钥缺失
+
+**错误信息**：`Uncaught Error: supabaseUrl is required`
+
+**解决方案**：
+1. 检查本地开发环境中 `.env.local` 文件是否包含以下环境变量：
+   ```
+   VITE_SUPABASE_URL=your_supabase_url_here
+   VITE_SUPABASE_ANON_KEY=your_supabase_anon_key_here
+   ```
+2. 在 Netlify 或其他云平台部署时，确保在控制台中正确配置了这些环境变量（包括 `VITE_` 前缀）
+3. 重新构建和部署项目
 
 ### 静态资源加载失败
 
