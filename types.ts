@@ -6,8 +6,8 @@ export interface Song {
   coverUrl?: string;
   releaseDate?: string; // ISO String or Year
   addedAt: number; // Timestamp
-  duration?: number; // Duration in seconds
   // 以下是现有表中额外的字段
+  duration?: number; // Duration in seconds
   lyrics?: string;
   comment?: string;
   tags?: string[];

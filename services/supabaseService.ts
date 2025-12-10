@@ -38,8 +38,7 @@ export async function getAllSongs(): Promise<Song[]> {
       // 确保返回的对象包含所有需要的字段
       coverUrl: song.coverUrl || '',
       releaseDate: song.releaseDate || '',
-      album: song.album || '',
-      duration: song.duration
+      album: song.album || ''
     }));
   } catch (error) {
     // 处理AuthSessionMissingError或其他错误
@@ -70,8 +69,7 @@ export async function addSong(song: Song): Promise<Song> {
         "coverUrl": song.coverUrl || '',
         "releaseDate": song.releaseDate || '',
         "addedAt": new Date(song.addedAt),
-        duration: song.duration,
-        user_id: user.id // 添加用户ID关联
+      user_id: user.id // 添加用户ID关联
       }])
       .select()
       .single();
@@ -91,7 +89,7 @@ export async function addSong(song: Song): Promise<Song> {
       coverUrl: data.coverUrl || '',
       releaseDate: data.releaseDate || '',
       album: data.album || '',
-      duration: data.duration
+  
     };
   } catch (error) {
     // 处理AuthSessionMissingError或其他错误
@@ -125,7 +123,6 @@ export async function addSongs(songs: Song[]): Promise<Song[]> {
       "coverUrl": song.coverUrl || '',
       "releaseDate": song.releaseDate || '',
       "addedAt": new Date(song.addedAt),
-      duration: song.duration,
       user_id: user.id // 添加用户ID关联
     }));
     
@@ -150,8 +147,7 @@ export async function addSongs(songs: Song[]): Promise<Song[]> {
       addedAt: new Date(song.addedAt).getTime(),
       coverUrl: song.coverUrl || '',
       releaseDate: song.releaseDate || '',
-      album: song.album || '',
-      duration: song.duration || 0
+      album: song.album || ''
     }));
   } catch (error) {
     // 处理AuthSessionMissingError或其他错误
@@ -185,9 +181,6 @@ export async function updateSong(songId: string, updatedFields: Partial<Song>): 
     if (updatedFields.album !== undefined) {
       updateData.album = updatedFields.album;
     }
-    if (updatedFields.duration !== undefined) {
-      updateData.duration = updatedFields.duration;
-    }
     if (updatedFields.coverUrl !== undefined) {
       updateData["coverUrl"] = updatedFields.coverUrl;
     }
@@ -220,8 +213,7 @@ export async function updateSong(songId: string, updatedFields: Partial<Song>): 
     addedAt: new Date(data.addedAt).getTime(),
     coverUrl: data.coverUrl || '',
     releaseDate: data.releaseDate || '',
-    album: data.album || '',
-    duration: data.duration
+    album: data.album || ''
   };
   } catch (error) {
     // 处理AuthSessionMissingError或其他错误

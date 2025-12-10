@@ -16,7 +16,6 @@ export interface SongInfo {
   name: string;
   artist: string;
   album: string;
-  duration: number;
   coverUrl: string;
   platform: string;
   platformName: string;
@@ -105,7 +104,7 @@ class MusicApiAdapter {
           name: song.trackName,
           artist: song.artistName,
           album: song.collectionName || '未知专辑',
-          duration: Math.floor(song.trackTimeMillis / 1000),
+  
           coverUrl: song.artworkUrl100?.replace('100x100', '300x300'),
           releaseDate: song.releaseDate, // 添加发行日期
           platform: country === 'CN' ? 'itunes-domestic' : 'itunes-international',
@@ -352,18 +351,13 @@ class MusicApiAdapter {
             albumName = songName;
           }
           
-          // 处理时长，增加更多可能的字段映射
-          let duration: number | undefined = undefined;
-          if (song.duration) duration = song.duration;
-          else if (song.time) duration = Math.floor(song.time / 1000);
-          else if (song.songTimeMinutes) duration = Math.floor(parseFloat(song.songTimeMinutes) * 60);
+
           
           return {
             id: song.id || song.songid || Math.random().toString(36).substr(2, 9),
             name: songName,
             artist: artistName,
             album: albumName,
-            duration: duration,
             coverUrl: coverUrl,
             releaseDate: releaseDate,
             platform: type,

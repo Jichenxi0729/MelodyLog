@@ -530,11 +530,7 @@ export const SongDetail: React.FC<SongDetailProps> = ({ songs, songId, onBack, o
                     );
                   })()}
                   
-                  {song.duration !== undefined && song.duration !== null && (
-                    <p className="text-xs text-gray-500">
-                      时长: <span className="text-gray-700">{Math.floor(song.duration / 60)}:{(song.duration % 60).toString().padStart(2, '0')}</span>
-                    </p>
-                  )}
+
                 </div>
               )}
             </div>
