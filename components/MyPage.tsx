@@ -1,14 +1,16 @@
 import React from 'react';
-import { Download, UploadCloud, Music2, Users, Database, Info } from 'lucide-react';
+import { Download, UploadCloud, Music2, Users, Database, Info, User as UserIcon } from 'lucide-react';
 import { Song } from '../types';
+import { User as AuthUser } from '../services/authService';
 
 interface MyPageProps {
   songs: Song[];
   onImport: () => void;
   onExport: () => void;
+  user: AuthUser | null;
 }
 
-const MyPage: React.FC<MyPageProps> = ({ songs, onImport, onExport }) => {
+const MyPage: React.FC<MyPageProps> = ({ songs, onImport, onExport, user }) => {
   // Calculate statistics
   const totalSongs = songs.length;
   // 正确计算唯一歌手数量：从artists数组中提取所有歌手并去重
@@ -35,6 +37,29 @@ const MyPage: React.FC<MyPageProps> = ({ songs, onImport, onExport }) => {
           </div>
         </div>
       </header>
+      
+      {/* User Profile */}
+      <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-6 mb-8">
+        <div className="flex items-center gap-4">
+          <div className="w-16 h-16 rounded-full bg-brand-light/10 flex items-center justify-center">
+            {user?.user_metadata?.avatar_url ? (
+              <img 
+                src={user.user_metadata.avatar_url} 
+                alt="用户头像" 
+                className="w-full h-full rounded-full object-cover"
+              />
+            ) : (
+              <UserIcon className="text-brand-light" size={32} />
+            )}
+          </div>
+          <div>
+            <h2 className="text-lg font-semibold text-slate-800">
+              {user?.user_metadata?.username || user?.user_metadata?.name || user?.user_metadata?.full_name || '用户'}
+            </h2>
+            <p className="text-sm text-slate-500">{user?.email || ''}</p>
+          </div>
+        </div>
+      </div>
       
       {/* Main Content */}
       <main className="max-w-3xl mx-auto px-4 py-6">

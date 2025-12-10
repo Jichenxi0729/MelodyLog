@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Plus, Search, Music2, UploadCloud, Home, Users, Download, User } from 'lucide-react';
+import { Plus, Search, Music2, UploadCloud, Home, Users, Download, User, LogIn, LogOut } from 'lucide-react';
 import { Song, ViewState } from './types';
 import { SongCard } from './components/SongCard';
 import { AddSongModal } from './components/AddSongModal';
@@ -10,10 +10,15 @@ import { ArtistDetail } from './components/ArtistDetail';
 import { AlbumDetail } from './components/AlbumDetail';
 import { SongDetail } from './components/SongDetail';
 import MyPage from './components/MyPage';
+import AuthModal from './components/AuthModal';
 import { musicApi } from './services/musicApiAdapter';
 import { exportSongsToCSV } from './utils/csvExporter';
+import { getAllSongs, addSong, addSongs, updateSong, deleteSong } from './services/supabaseService';
+import { getCurrentUser, signOut, onAuthStateChange } from './services/authService';
+import { User as AuthUser } from './services/authService';
 
 // Constants
+// localStorage key for song data - used for migration only
 const STORAGE_KEY = 'melodylog_songs';
 
 const App: React.FC = () => {
@@ -28,6 +33,7 @@ const App: React.FC = () => {
   // Modals
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   
   // Sorting
   const [sortConfig, setSortConfig] = useState<{
@@ -35,23 +41,120 @@ const App: React.FC = () => {
     direction: 'asc' | 'desc';
   }>({ key: 'addedAt', direction: 'desc' });
   const [isSortMenuOpen, setIsSortMenuOpen] = useState(false);
+  
+  // Auth State
+  const [user, setUser] = useState<AuthUser | null>(null);
+  const [isLoadingUser, setIsLoadingUser] = useState(true);
+  const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
 
-  // Initialize from LocalStorage
+  // Load current user and listen for auth state changes
   useEffect(() => {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    if (stored) {
+    const loadUser = async () => {
       try {
-        setSongs(JSON.parse(stored));
-      } catch (e) {
-        console.error("Failed to parse songs", e);
+        const { user } = await getCurrentUser();
+        setUser(user);
+      } catch (error: any) {
+        console.error('Failed to load user:', error);
+        // 捕获到的任何错误都应该设置用户为null
+        setUser(null);
+      } finally {
+        setIsLoadingUser(false);
       }
-    }
+    };
+
+    loadUser();
+
+    // Listen for auth state changes
+    const subscription = onAuthStateChange((authUser) => {
+      setUser(authUser);
+      if (authUser) {
+        // User logged in, load their songs
+        // 直接在回调中获取最新的用户歌曲
+        const fetchSongs = async () => {
+          try {
+            // Load songs from Supabase
+            const songsFromSupabase = await getAllSongs();
+            setSongs(songsFromSupabase);
+          } catch (error) {
+            console.error('Failed to load songs after login:', error);
+          }
+        };
+        fetchSongs();
+      } else {
+        // User logged out, clear songs
+        setSongs([]);
+      }
+    });
+
+    return () => subscription.data.subscription.unsubscribe();
   }, []);
 
-  // Save to LocalStorage whenever songs change
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(songs));
-  }, [songs]);
+  // Load songs from Supabase on initial render and when user changes
+  const loadSongs = async () => {
+    if (!user) return;
+    
+    try {
+      // Load songs from Supabase
+      const songsFromSupabase = await getAllSongs();
+      setSongs(songsFromSupabase);
+
+      // Check if there are songs in localStorage that need to be migrated
+      const savedSongs = localStorage.getItem(STORAGE_KEY);
+      if (savedSongs) {
+        try {
+          const parsedSongs = JSON.parse(savedSongs) as Song[];
+          if (parsedSongs.length > 0) {
+            // If Supabase is empty, migrate all songs
+            if (songsFromSupabase.length === 0) {
+              console.log('Migrating songs from localStorage to Supabase...');
+              for (const song of parsedSongs) {
+                await addSong(song);
+              }
+              // Update the songs state with the migrated songs
+              setSongs(parsedSongs);
+              console.log('Migration completed successfully!');
+            } else {
+              // If Supabase already has songs, check for new songs to migrate
+              const supabaseIds = new Set(songsFromSupabase.map(song => song.id));
+              const songsToMigrate = parsedSongs.filter(song => !supabaseIds.has(song.id));
+              
+              if (songsToMigrate.length > 0) {
+                console.log(`Migrating ${songsToMigrate.length} new songs from localStorage to Supabase...`);
+                for (const song of songsToMigrate) {
+                  await addSong(song);
+                }
+                // Update the songs state with the combined list
+                const updatedSongs = [...songsFromSupabase, ...songsToMigrate];
+                setSongs(updatedSongs);
+                console.log('Migration completed successfully!');
+              }
+            }
+            
+            // Clear localStorage after migration
+            localStorage.removeItem(STORAGE_KEY);
+            console.log('LocalStorage cleared after migration.');
+          }
+        } catch (error) {
+          console.error('Failed to parse saved songs:', error);
+        }
+      }
+    } catch (error) {
+      console.error('Failed to load songs from Supabase:', error);
+      // Fallback to localStorage if Supabase fails
+      const savedSongs = localStorage.getItem(STORAGE_KEY);
+      if (savedSongs) {
+        try {
+          const parsedSongs = JSON.parse(savedSongs) as Song[];
+          setSongs(parsedSongs);
+        } catch (parseError) {
+          console.error('Failed to parse saved songs:', parseError);
+          setSongs([]);
+        }
+      } else {
+        setSongs([]);
+      }
+    }
+  };
 
   // Filtered and Sorted Songs (Only for Home View)
   const filteredHomeSongs = useMemo(() => {
@@ -94,10 +197,15 @@ const App: React.FC = () => {
   }, [songs, searchQuery, sortConfig]);
 
   // Handlers
-  const handleDeleteSong = (songId: string) => {
+  const handleDeleteSong = async (songId: string) => {
     // 确认删除
     if (window.confirm('确定要删除这首歌曲吗？')) {
-      setSongs(prevSongs => prevSongs.filter(song => song.id !== songId));
+      try {
+        await deleteSong(songId);
+        setSongs(prevSongs => prevSongs.filter(song => song.id !== songId));
+      } catch (error) {
+        console.error('Failed to delete song:', error);
+      }
     }
   };
 
@@ -170,18 +278,30 @@ const App: React.FC = () => {
       addedAt: Date.now()
     };
 
-    setSongs(prev => [newSong, ...prev]);
+    try {
+      // Add to Supabase（现在会抛出错误而不是返回null）
+      const addedSong = await addSong(newSong);
+      // 只有当歌曲成功添加到Supabase后，才更新本地状态
+      setSongs(prev => [addedSong, ...prev]);
+    } catch (error) {
+      console.error('添加歌曲失败:', error);
+      throw error;
+    }
   };
 
-  const handleUpdateSong = (updatedSong: Song) => {
-    setSongs(prevSongs => {
-      const updatedSongs = prevSongs.map(song => 
-        song.id === updatedSong.id ? updatedSong : song
-      );
-      // 保存到localStorage
-      localStorage.setItem('songs', JSON.stringify(updatedSongs));
-      return updatedSongs;
-    });
+  const handleUpdateSong = async (updatedSong: Song) => {
+    try {
+      // Update in Supabase
+      await updateSong(updatedSong.id, updatedSong);
+      // Update local state
+      setSongs(prevSongs => {
+        return prevSongs.map(song => 
+          song.id === updatedSong.id ? updatedSong : song
+        );
+      });
+    } catch (error) {
+      console.error('Failed to update song:', error);
+    }
   };
 
   const handleBulkImport = async (lines: string[], enableSmartMatch: boolean = true) => {
@@ -398,14 +518,22 @@ const App: React.FC = () => {
 
     // 更新歌曲列表
     if (newSongs.length > 0) {
-      setSongs(prev => [...newSongs, ...prev]);
-      
-      // 显示导入结果
-      const successMessage = `成功导入 ${newSongs.length} 首歌曲`;
-      if (importErrors.length > 0) {
-        alert(`${successMessage}\n\n导入失败的歌曲：\n${importErrors.slice(0, 10).join('\n')}${importErrors.length > 10 ? `\n...等${importErrors.length - 10}首歌曲` : ''}`);
-      } else {
-        console.log(successMessage);
+      try {
+        // 使用批量添加功能添加所有新歌曲到Supabase
+        const addedSongs = await addSongs(newSongs);
+        // Update local state
+        setSongs(prev => [...addedSongs, ...prev]);
+        
+        // 显示导入结果
+        const successMessage = `成功导入 ${addedSongs.length} 首歌曲`;
+        if (importErrors.length > 0) {
+          alert(`${successMessage}\n\n导入失败的歌曲：\n${importErrors.slice(0, 10).join('\n')}${importErrors.length > 10 ? `\n...等${importErrors.length - 10}首歌曲` : ''}`);
+        } else {
+          console.log(successMessage);
+        }
+      } catch (error) {
+        console.error('Failed to import songs:', error);
+        alert('歌曲导入失败，请重试');
       }
     } else {
       alert('没有成功导入任何歌曲，可能是因为所有歌曲都已存在或格式错误');
@@ -498,10 +626,59 @@ const App: React.FC = () => {
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-light focus:border-brand-light outline-none text-sm"
+                  disabled={!user}
                 />
               </div>
               
-              {/* No import/export buttons here - moved to My Page */}
+              {/* User Menu */}
+              {user ? (
+                <div className="relative">
+                  <button
+                    onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
+                    onBlur={(e) => {
+                      // 检查是否点击的是菜单项本身
+                      if (!e.currentTarget.parentElement?.contains(e.relatedTarget as Node)) {
+                        // 延迟关闭菜单，以便用户可以点击菜单项
+                        setTimeout(() => setIsUserMenuOpen(false), 200);
+                      }
+                    }}
+                    className="p-2 rounded-full bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors"
+                    aria-label="用户菜单"
+                  >
+                    <User size={20} />
+                  </button>
+                  {/* Dropdown Menu */}
+                  {isUserMenuOpen && (
+                    <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg py-2 z-50">
+                      <button
+                        onClick={async (e) => {
+                          e.stopPropagation(); // 防止触发父元素的事件
+                          try {
+                            console.log('Attempting to sign out...');
+                            const result = await signOut();
+                            console.log('Sign out result:', result);
+                            setIsUserMenuOpen(false);
+                          } catch (error) {
+                            console.error('Failed to sign out:', error);
+                          }
+                        }}
+                        className="flex items-center gap-2 w-full px-4 py-2 text-left text-slate-700 hover:bg-slate-50 transition-colors"
+                      >
+                        <LogOut size={16} />
+                        登出
+                      </button>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <button
+                  onClick={() => setIsAuthModalOpen(true)}
+                  className="p-2 rounded-full bg-brand-light text-white hover:bg-brand-dark transition-colors"
+                  aria-label="登录/注册"
+                >
+                  <LogIn size={20} />
+                </button>
+              )}
             </div>
           </div>
         </header>
@@ -509,6 +686,28 @@ const App: React.FC = () => {
 
       {/* Main Content */}
       <main className="max-w-3xl mx-auto px-4 pb-24 pt-4">
+        {/* Login Prompt */}
+        {isLoadingUser ? (
+          <div className="flex items-center justify-center h-64">
+            <div className="w-10 h-10 border-4 border-brand-light border-t-transparent rounded-full animate-spin mr-3"></div>
+            <p className="text-slate-600">加载中...</p>
+          </div>
+        ) : !user ? (
+          <div className="flex flex-col items-center justify-center h-64 text-center">
+            <User size={64} className="text-brand-light mb-4" />
+            <h2 className="text-2xl font-bold text-slate-800 mb-2">欢迎使用音想</h2>
+            <p className="text-slate-600 mb-6 max-w-md">
+              登录或注册账号，开始管理您的音乐收藏
+            </p>
+            <button
+              onClick={() => setIsAuthModalOpen(true)}
+              className="px-6 py-3 bg-brand-light text-white font-semibold rounded-lg hover:bg-brand-dark transition-colors"
+            >
+              登录/注册
+            </button>
+          </div>
+        ) : (
+        <div>
         {/* Breadcrumb - Removed back button from ARTISTS page as requested */}
         
         {/* VIEW: HOME */}
@@ -673,6 +872,7 @@ const App: React.FC = () => {
                 songs={songs} 
                 onImport={() => setIsImportModalOpen(true)}
                 onExport={() => exportSongsToCSV(songs)}
+                user={user}
             />
         )}
 
@@ -711,13 +911,14 @@ const App: React.FC = () => {
                 onUpdateSong={handleUpdateSong}
             />
         )}
-
-      </main>
+      </div>
+      )}
+    </main>
 
       {/* Bottom Navigation Bar - Smaller size */}
-        <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-100 z-50 shadow-lg">
-          <div className="max-w-3xl mx-auto px-4 py-1">
-            <div className="flex justify-around items-center">
+      <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-100 z-50 shadow-lg">
+        <div className="max-w-3xl mx-auto px-4 py-1">
+          <div className="flex justify-around items-center">
               {/* Home Button */}
               <button
                 onClick={navigateToHome}
@@ -795,6 +996,14 @@ const App: React.FC = () => {
         isOpen={isImportModalOpen} 
         onClose={() => setIsImportModalOpen(false)} 
         onImport={handleBulkImport} 
+      />
+      <AuthModal
+        isOpen={isAuthModalOpen}
+        onClose={() => setIsAuthModalOpen(false)}
+        onSuccess={() => {
+          // Auth successful
+          console.log('Authentication successful');
+        }}
       />
 
     </div>

@@ -7,6 +7,15 @@ export interface Song {
   releaseDate?: string; // ISO String or Year
   addedAt: number; // Timestamp
   duration?: number; // Duration in seconds
+  // 以下是现有表中额外的字段
+  lyrics?: string;
+  comment?: string;
+  tags?: string[];
+  listenedDate?: string;
+  rating?: number;
+  spotifyUrl?: string;
+  neteaseUrl?: string;
+  youtubeUrl?: string;
 }
 
 export type SortOption = 'newest' | 'oldest' | 'artist';

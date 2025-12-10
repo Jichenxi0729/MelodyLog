@@ -69,82 +69,60 @@ export const fetchLyrics = async (songTitle: string, artist?: string): Promise<s
   }
   
   try {
-    // 调用用户提供的歌词API
+    // 调用Lokua的歌词API
     console.log(`[API] 获取歌词: ${songTitle}${artist ? ` - ${artist}` : ''}`);
     
-    // 首先尝试获取歌曲列表，根据歌手名字选择正确的歌曲序号
-    const songListResponse = await fetch(`https://www.hhlqilongzhu.cn/api/dg_geci.php?msg=${encodeURIComponent(songTitle)}&type=1`);
+    // 使用网易云音乐接口，因为它是最常用的
+    const response = await fetch(`https://lokuamusic.top/api/netease?input=${encodeURIComponent(songTitle + (artist ? ` ${artist}` : ''))}&filter=name&page=1`);
     
-    if (!songListResponse.ok) {
-      throw new Error('Failed to fetch song list');
+    if (!response.ok) {
+      throw new Error('Failed to fetch lyrics from Lokua API');
     }
     
-    const songListData = await songListResponse.text();
-    const songListLines = songListData.split('\n')
-      .map(line => line.trim())
-      .filter(line => line.length > 0 && !line.startsWith('LRC'));
+    const data = await response.json();
     
     // 检查是否返回了歌曲列表
-    if (songListLines.length > 0 && /^\d+\./.test(songListLines[0])) {
-      console.log('Received song list, searching for matching artist...');
+    if (data.code === 200 && data.data && data.data.length > 0) {
+      console.log('Received song list from Lokua API');
       
-      let selectedSongIndex = 1; // 默认选择第一首
+      let selectedSong = data.data[0]; // 默认选择第一首
       
-      // 如果有歌手信息，尝试匹配正确的歌曲序号
+      // 如果有歌手信息，尝试匹配正确的歌曲
       if (artist) {
         const artistLower = artist.toLowerCase();
-        for (let i = 0; i < songListLines.length; i++) {
-          const line = songListLines[i];
-          // 检查行中是否包含歌手名字
-          if (line.toLowerCase().includes(artistLower)) {
-            // 提取序号
-            const match = line.match(/^(\d+)\./);
-            if (match) {
-              selectedSongIndex = parseInt(match[1]);
-              console.log(`Found matching artist, selected song index: ${selectedSongIndex}`);
-              break;
-            }
-          }
+        const matchedSong = data.data.find((song: any) => 
+          song.author.toLowerCase().includes(artistLower) ||
+          song.title.toLowerCase().includes(artistLower)
+        );
+        if (matchedSong) {
+          selectedSong = matchedSong;
+          console.log(`Found matching song: ${selectedSong.title} - ${selectedSong.author}`);
         }
       }
       
-      // 使用选定的歌曲序号获取歌词
-      const lyricsResponse = await fetch(`https://www.hhlqilongzhu.cn/api/dg_geci.php?msg=${encodeURIComponent(songTitle)}&type=1&n=${selectedSongIndex}`);
-      
-      if (!lyricsResponse.ok) {
-        throw new Error('Failed to fetch lyrics with selected index');
-      }
-      
-      const lyricsData = await lyricsResponse.text();
-      
       // 解析歌词数据
-      const lines = lyricsData.split('\n')
-        .map(line => line.trim())
-        .filter(line => line.length > 0 && !line.startsWith('LRC'));
-      
-      // 如果返回的仍然是歌曲列表，则返回模拟歌词
-      if (lines.length > 0 && /^\d+\./.test(lines[0])) {
-        console.log('Still received song list after index selection');
-        const result = [
-          '这里是模拟歌词',
-          '因为歌词API返回了歌曲列表',
-          '请尝试更具体的歌曲名称',
-          '或者提供正确的歌曲序号'
-        ];
+      if (selectedSong.lrc) {
+        // 解析LRC格式歌词
+        const lines = selectedSong.lrc.split('\n')
+          .map((line: string) => {
+            // 移除时间戳
+            const textOnly = line.replace(/\[[\d:\.]+\]/g, '').trim();
+            return textOnly;
+          })
+          .filter((line: string) => line.length > 0);
+        
+        const result = lines.length > 0 ? lines : ['暂无歌词'];
+        saveLyricsToCache(cacheKey, 'lyrics', result);
+        return result;
+      } else {
+        console.log('No lyrics found for this song');
+        const result = ['暂无歌词'];
         saveLyricsToCache(cacheKey, 'lyrics', result);
         return result;
       }
-      
-      const result = lines.length > 0 ? lines : ['暂无歌词'];
-      saveLyricsToCache(cacheKey, 'lyrics', result);
-      return result;
     } else {
-      // 直接返回歌词数据
-      const lines = songListData.split('\n')
-        .map(line => line.trim())
-        .filter(line => line.length > 0 && !line.startsWith('LRC'));
-      
-      const result = lines.length > 0 ? lines : ['暂无歌词'];
+      console.log('No matching songs found');
+      const result = ['暂无歌词'];
       saveLyricsToCache(cacheKey, 'lyrics', result);
       return result;
     }
@@ -163,8 +141,8 @@ export const fetchLyrics = async (songTitle: string, artist?: string): Promise<s
 };
 
 // 获取带时间戳的歌词（如果需要）
-export const fetchLyricsWithTime = async (songTitle: string): Promise<Array<{ time: string; text: string }>> => {
-  const cacheKey = songTitle.trim().toLowerCase();
+export const fetchLyricsWithTime = async (songTitle: string, artist?: string): Promise<Array<{ time: string; text: string }>> => {
+  const cacheKey = `${songTitle.trim().toLowerCase()}_${artist || ''}`;
   
   // 检查缓存
   const cachedData = getLyricsFromCache(cacheKey, 'lyricsWithTime');
@@ -173,39 +151,74 @@ export const fetchLyricsWithTime = async (songTitle: string): Promise<Array<{ ti
   }
   
   try {
-    console.log(`[API] 获取带时间戳歌词: ${songTitle}`);
-    const response = await fetch(`https://www.hhlqilongzhu.cn/api/dg_geci.php?msg=${encodeURIComponent(songTitle)}&type=2&n=1`);
+    console.log(`[API] 获取带时间戳歌词: ${songTitle}${artist ? ` - ${artist}` : ''}`);
+    
+    // 使用网易云音乐接口，因为它是最常用的
+    const response = await fetch(`https://lokuamusic.top/api/netease?input=${encodeURIComponent(songTitle + (artist ? ` ${artist}` : ''))}&filter=name&page=1`);
     
     if (!response.ok) {
-      throw new Error('Failed to fetch lyrics with time');
+      throw new Error('Failed to fetch lyrics with time from Lokua API');
     }
     
-    const data = await response.text();
+    const data = await response.json();
     
-    // 解析带时间戳的歌词
-    const lines = data.split('\n')
-      .map(line => line.trim())
-      .filter(line => line.length > 0);
-    
-    // 这里需要根据API返回的具体格式来解析时间戳和歌词内容
-    // 假设格式为 [00:00.00]歌词内容
-    const result = lines.map(line => {
-      const match = line.match(/\[(\d+:\d+\.\d+)\](.*)/);
-      if (match) {
-        return {
-          time: match[1],
-          text: match[2]
-        };
+    // 检查是否返回了歌曲列表
+    if (data.code === 200 && data.data && data.data.length > 0) {
+      console.log('Received song list from Lokua API');
+      
+      let selectedSong = data.data[0]; // 默认选择第一首
+      
+      // 如果有歌手信息，尝试匹配正确的歌曲
+      if (artist) {
+        const artistLower = artist.toLowerCase();
+        const matchedSong = data.data.find((song: any) => 
+          song.author.toLowerCase().includes(artistLower) ||
+          song.title.toLowerCase().includes(artistLower)
+        );
+        if (matchedSong) {
+          selectedSong = matchedSong;
+          console.log(`Found matching song: ${selectedSong.title} - ${selectedSong.author}`);
+        }
       }
-      return {
-        time: '',
-        text: line
-      };
-    });
-    
-    // 缓存结果
-    saveLyricsToCache(cacheKey, 'lyricsWithTime', result);
-    return result;
+      
+      // 解析带时间戳的歌词
+      if (selectedSong.lrc) {
+        // 解析LRC格式歌词
+        const lines = selectedSong.lrc.split('\n')
+          .map((line: string) => line.trim())
+          .filter((line: string) => line.length > 0);
+        
+        // 解析时间戳和歌词内容
+        const result = lines.map((line: string) => {
+          const match = line.match(/\[(\d+:\d+\.\d+)\](.*)/);
+          if (match) {
+            return {
+              time: match[1],
+              text: match[2]
+            };
+          }
+          // 如果没有时间戳，也返回歌词内容
+          return {
+            time: '',
+            text: line
+          };
+        });
+        
+        // 缓存结果
+        saveLyricsToCache(cacheKey, 'lyricsWithTime', result);
+        return result;
+      } else {
+        console.log('No lyrics found for this song');
+        const result: Array<{ time: string; text: string }> = [];
+        saveLyricsToCache(cacheKey, 'lyricsWithTime', result);
+        return result;
+      }
+    } else {
+      console.log('No matching songs found');
+      const result: Array<{ time: string; text: string }> = [];
+      saveLyricsToCache(cacheKey, 'lyricsWithTime', result);
+      return result;
+    }
   } catch (error) {
     console.error('Error fetching lyrics with time:', error);
     const result: Array<{ time: string; text: string }> = [];

@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@suen/music-api": "^1.1.16",
+    "@supabase/supabase-js": "^2.87.1",
     "@types/react-router-dom": "^5.3.3",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
