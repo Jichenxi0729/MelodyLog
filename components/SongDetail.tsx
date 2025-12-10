@@ -516,13 +516,21 @@ export const SongDetail: React.FC<SongDetailProps> = ({ songs, songId, onBack, o
                     </p>
                   )}
                   
-                  {song.releaseDate && (
-                    <p className="text-xs text-gray-500 mb-1">
-                      发行日期: <span className="text-gray-700">{new Date(song.releaseDate).getFullYear()}</span>
-                    </p>
-                  )}
+                  {song.releaseDate && (() => {
+                    let releaseYear;
+                    if (typeof song.releaseDate === 'string' && !isNaN(Number(song.releaseDate))) {
+                      releaseYear = Number(song.releaseDate);
+                    } else {
+                      releaseYear = new Date(song.releaseDate).getFullYear();
+                    }
+                    return !isNaN(releaseYear) && (
+                      <p className="text-xs text-gray-500 mb-1">
+                        发行日期: <span className="text-gray-700">{releaseYear}</span>
+                      </p>
+                    );
+                  })()}
                   
-                  {song.duration && (
+                  {song.duration !== undefined && song.duration !== null && (
                     <p className="text-xs text-gray-500">
                       时长: <span className="text-gray-700">{Math.floor(song.duration / 60)}:{(song.duration % 60).toString().padStart(2, '0')}</span>
                     </p>

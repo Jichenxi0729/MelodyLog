@@ -353,7 +353,7 @@ class MusicApiAdapter {
           }
           
           // 处理时长，增加更多可能的字段映射
-          let duration = 0;
+          let duration: number | undefined = undefined;
           if (song.duration) duration = song.duration;
           else if (song.time) duration = Math.floor(song.time / 1000);
           else if (song.songTimeMinutes) duration = Math.floor(parseFloat(song.songTimeMinutes) * 60);
