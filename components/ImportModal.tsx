@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Upload, X, AlertCircle, FileText, FileUp, CheckCircle2, Search } from 'lucide-react';
+import { Upload, X, AlertCircle, FileText, FileUp, CheckCircle2 } from 'lucide-react';
 
 interface SongImportInfo {
   title: string;
@@ -13,7 +13,7 @@ interface SongImportInfo {
 interface ImportModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onImport: (lines: string[], enableSmartMatch: boolean) => Promise<void>;
+  onImport: (lines: string[]) => Promise<void>;
 }
 
 const ImportModal: React.FC<ImportModalProps> = ({ isOpen, onClose, onImport }) => {
@@ -21,7 +21,6 @@ const ImportModal: React.FC<ImportModalProps> = ({ isOpen, onClose, onImport }) 
   const [isLoading, setIsLoading] = useState(false);
   const [status, setStatus] = useState<'idle' | 'success' | 'error'>('idle');
   const [activeTab, setActiveTab] = useState<'text' | 'csv'>('text');
-  const [enableSmartMatch, setEnableSmartMatch] = useState(true);
 
   if (!isOpen) return null;
 
@@ -43,7 +42,7 @@ const ImportModal: React.FC<ImportModalProps> = ({ isOpen, onClose, onImport }) 
         }
       });
       
-      await onImport(validatedLines, enableSmartMatch);
+      await onImport(validatedLines);
       setStatus('success');
       
       // 成功后自动关闭
@@ -126,7 +125,7 @@ const ImportModal: React.FC<ImportModalProps> = ({ isOpen, onClose, onImport }) 
           JSON.stringify(info)
         );
         
-        await onImport(importData, enableSmartMatch);
+        await onImport(importData);
         setStatus('success');
         
         // 显示导入结果
@@ -247,25 +246,7 @@ const ImportModal: React.FC<ImportModalProps> = ({ isOpen, onClose, onImport }) 
         </div>
 
         <div className="p-6 space-y-4">
-          {/* 智能匹配开关 */}
-          <div className="flex items-center justify-between p-3 bg-slate-50 rounded-lg border border-slate-200">
-            <div className="flex items-center gap-2">
-              <Search size={18} className="text-brand-light" />
-              <div>
-                <p className="text-sm font-medium text-slate-800">智能匹配歌曲信息</p>
-                <p className="text-xs text-slate-500">自动获取封面图片、专辑、发行日期等信息</p>
-              </div>
-            </div>
-            <label className="relative inline-flex items-center cursor-pointer">
-              <input 
-                type="checkbox" 
-                className="sr-only peer" 
-                checked={enableSmartMatch}
-                onChange={(e) => setEnableSmartMatch(e.target.checked)}
-              />
-              <div className="w-11 h-6 bg-slate-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-brand-light"></div>
-            </label>
-          </div>
+  
 
           {activeTab === 'text' ? (
             <>

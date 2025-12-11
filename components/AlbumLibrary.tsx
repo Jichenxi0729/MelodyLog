@@ -67,10 +67,10 @@ export const AlbumLibrary: React.FC<AlbumLibraryProps> = ({ songs, onSelectAlbum
       <div className="grid grid-cols-3 gap-4">
         {albumsData.map(({ name, count, year, coverUrl, artists }) => (
           <div key={name} className="group">
-            {/* 专辑封面 - 适当缩小尺寸，增加间距 */}
+            {/* 专辑封面 - 适当放大尺寸，去除边框 */}
             <button
               onClick={() => onSelectAlbum(name)}
-              className="relative block w-full aspect-square rounded-lg overflow-hidden transition-all group-hover:shadow-lg p-1 bg-slate-100"
+              className="relative block w-full aspect-square rounded-lg overflow-hidden transition-all group-hover:shadow-lg"
             >
               {coverUrl ? (
                 <img 

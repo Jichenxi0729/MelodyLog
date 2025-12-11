@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Song } from '../types';
 import { SongCard } from './SongCard';
 import { ArrowLeft, Disc, Calendar, User } from 'lucide-react';
@@ -10,9 +10,19 @@ interface AlbumDetailProps {
   onArtistClick: (artist: string) => void;
   onDeleteSong: (songId: string) => void;
   onSongClick?: (songId: string) => void;
+  onUpdateAlbum: (oldAlbumName: string, newAlbumName: string) => Promise<void>;
 }
 
-export const AlbumDetail: React.FC<AlbumDetailProps> = ({ album, songs, onBack, onArtistClick, onDeleteSong, onSongClick }) => {
+export const AlbumDetail: React.FC<AlbumDetailProps> = ({ album, songs, onBack, onArtistClick, onDeleteSong, onSongClick, onUpdateAlbum }) => {
+  const [isEditingAlbum, setIsEditingAlbum] = useState(false);
+  const [newAlbumName, setNewAlbumName] = useState(album);
+
+  const handleSaveAlbumName = async () => {
+    if (newAlbumName.trim() && newAlbumName !== album) {
+      await onUpdateAlbum(album, newAlbumName.trim());
+      setIsEditingAlbum(false);
+    }
+  };
   const albumSongs = useMemo(() => {
     return songs
       .filter(s => s.album === album)
@@ -45,7 +55,49 @@ export const AlbumDetail: React.FC<AlbumDetailProps> = ({ album, songs, onBack, 
         {/* Album Info */}
         <div className="flex-1 pt-2">
             <span className="text-brand-light font-semibold text-xs uppercase tracking-wider bg-blue-50 px-2 py-1 rounded-md">专辑</span>
-            <h1 className="text-2xl md:text-4xl font-bold text-slate-900 mt-2 mb-2 leading-tight">{album}</h1>
+            {isEditingAlbum ? (
+              <div className="flex items-center gap-2 mt-2">
+                <input
+                  type="text"
+                  value={newAlbumName}
+                  onChange={(e) => setNewAlbumName(e.target.value)}
+                  className="text-2xl md:text-4xl font-bold text-slate-900 border-b-2 border-brand-light pb-1 focus:outline-none"
+                  autoFocus
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') handleSaveAlbumName();
+                    if (e.key === 'Escape') {
+                      setNewAlbumName(album);
+                      setIsEditingAlbum(false);
+                    }
+                  }}
+                />
+                <div className="flex gap-2">
+                  <button
+                    onClick={handleSaveAlbumName}
+                    className="px-3 py-1 bg-brand-light text-white rounded-md hover:bg-brand-medium transition-colors"
+                  >
+                    保存
+                  </button>
+                  <button
+                    onClick={() => {
+                      setNewAlbumName(album);
+                      setIsEditingAlbum(false);
+                    }}
+                    className="px-3 py-1 bg-slate-200 text-slate-700 rounded-md hover:bg-slate-300 transition-colors"
+                  >
+                    取消
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <h1 
+                className="text-2xl md:text-4xl font-bold text-slate-900 mt-2 mb-2 leading-tight cursor-pointer hover:text-brand-light transition-colors"
+                onClick={() => setIsEditingAlbum(true)}
+                title="点击修改专辑名称"
+              >
+                {album}
+              </h1>
+            )}
             
             <div className="space-y-2">
                 <div className="text-lg text-slate-600 font-medium flex items-center gap-2">

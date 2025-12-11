@@ -207,30 +207,36 @@ export const AddSongModal: React.FC<AddSongModalProps> = ({ isOpen, onClose, onA
         });
         
         if (matchedSong) {
-          // 使用国内版完全匹配到的歌曲信息
-          coverUrl = matchedSong.coverUrl || '';
-          matchedAlbum = matchedSong.album;
-          releaseDate = matchedSong.releaseDate;
-          console.log('使用国内版完全匹配到的歌曲信息');
-        } else {
-          // 国内版没有完全匹配，使用国际版第一首歌的数据
-          const internationalResults = await musicApi.search({
-            keyword: `${title} ${artist}`,
-            apiType: 'itunes-international',
-            limit: 1
-          });
-          
-          if (internationalResults.length > 0) {
-            // 使用国际版第一首歌的信息
-            const internationalSong = internationalResults[0];
-            coverUrl = internationalSong.coverUrl || '';
-            matchedAlbum = internationalSong.album;
-            releaseDate = internationalSong.releaseDate;
-            console.log('使用国际版第一首歌的信息');
+            // 使用国内版完全匹配到的歌曲信息
+            coverUrl = matchedSong.coverUrl || '';
+            // 只有当用户没有手动输入专辑时，才使用API获取的专辑信息
+            if (!album.trim()) {
+              matchedAlbum = matchedSong.album;
+            }
+            releaseDate = matchedSong.releaseDate;
+            console.log('使用国内版完全匹配到的歌曲信息');
           } else {
-            console.log('国际版也没有找到歌曲，使用用户输入的信息');
+            // 国内版没有完全匹配，使用国际版第一首歌的数据
+            const internationalResults = await musicApi.search({
+              keyword: `${title} ${artist}`,
+              apiType: 'itunes-international',
+              limit: 1
+            });
+            
+            if (internationalResults.length > 0) {
+              // 使用国际版第一首歌的信息
+              const internationalSong = internationalResults[0];
+              coverUrl = internationalSong.coverUrl || '';
+              // 只有当用户没有手动输入专辑时，才使用API获取的专辑信息
+              if (!album.trim()) {
+                matchedAlbum = internationalSong.album;
+              }
+              releaseDate = internationalSong.releaseDate;
+              console.log('使用国际版第一首歌的信息');
+            } else {
+              console.log('国际版也没有找到歌曲，使用用户输入的信息');
+            }
           }
-        }
       } catch (error) {
         console.warn('歌曲信息匹配失败，使用用户输入的信息:', error);
       }

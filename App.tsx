@@ -13,6 +13,7 @@ import MyPage from './components/MyPage';
 import AuthModal from './components/AuthModal';
 import { musicApi } from './services/musicApiAdapter';
 import { exportSongsToCSV } from './utils/csvExporter';
+import { setCache, getCache, clearCache } from './utils/cacheUtils';
 import { getAllSongs, addSong, addSongs, updateSong, deleteSong } from './services/supabaseService';
 import { getCurrentUser, signOut, onAuthStateChange } from './services/authService';
 import { User as AuthUser } from './services/authService';
@@ -69,20 +70,38 @@ const App: React.FC = () => {
       setUser(authUser);
       if (authUser) {
         // User logged in, load their songs
-        // 直接在回调中获取最新的用户歌曲
+        // 使用缓存优先策略
         const fetchSongs = async () => {
           try {
-            // Load songs from Supabase
+            // 首先尝试从本地缓存获取歌曲
+            const cachedSongs = getCache<Song[]>('user_songs');
+            if (cachedSongs) {
+              // 如果缓存存在，先使用缓存数据，提升用户体验
+              setSongs(cachedSongs);
+              console.log('Loaded songs from cache');
+            }
+            
+            // 然后从Supabase获取最新数据，更新缓存和状态
             const songsFromSupabase = await getAllSongs();
             setSongs(songsFromSupabase);
+            // 更新缓存，设置过期时间为1小时
+            setCache('user_songs', songsFromSupabase);
+            console.log('Loaded songs from Supabase and updated cache');
           } catch (error) {
             console.error('Failed to load songs after login:', error);
+            // 如果Supabase加载失败，尝试使用缓存
+            const cachedSongs = getCache<Song[]>('user_songs');
+            if (cachedSongs) {
+              setSongs(cachedSongs);
+              console.log('Fallback to cached songs due to Supabase error');
+            }
           }
         };
         fetchSongs();
       } else {
-        // User logged out, clear songs
+        // User logged out, clear songs and cache
         setSongs([]);
+        clearCache('user_songs');
       }
     });
 
@@ -94,10 +113,17 @@ const App: React.FC = () => {
     if (!user) return;
     
     try {
-      // Load songs from Supabase
+      // 首先尝试从本地缓存获取歌曲
+      const cachedSongs = getCache<Song[]>('user_songs');
+      if (cachedSongs) {
+        // 如果缓存存在，先使用缓存数据
+        setSongs(cachedSongs);
+        console.log('Loaded songs from cache in loadSongs');
+      }
+      
+      // 从Supabase加载最新数据
       const songsFromSupabase = await getAllSongs();
-      setSongs(songsFromSupabase);
-
+      
       // Check if there are songs in localStorage that need to be migrated
       const savedSongs = localStorage.getItem(STORAGE_KEY);
       if (savedSongs) {
@@ -112,6 +138,8 @@ const App: React.FC = () => {
               }
               // Update the songs state with the migrated songs
               setSongs(parsedSongs);
+              // 更新缓存
+              setCache('user_songs', parsedSongs);
               console.log('Migration completed successfully!');
             } else {
               // If Supabase already has songs, check for new songs to migrate
@@ -126,7 +154,13 @@ const App: React.FC = () => {
                 // Update the songs state with the combined list
                 const updatedSongs = [...songsFromSupabase, ...songsToMigrate];
                 setSongs(updatedSongs);
+                // 更新缓存
+                setCache('user_songs', updatedSongs);
                 console.log('Migration completed successfully!');
+              } else {
+                // 如果没有需要迁移的歌曲，使用Supabase数据并更新缓存
+                setSongs(songsFromSupabase);
+                setCache('user_songs', songsFromSupabase);
               }
             }
             
@@ -140,18 +174,27 @@ const App: React.FC = () => {
       }
     } catch (error) {
       console.error('Failed to load songs from Supabase:', error);
-      // Fallback to localStorage if Supabase fails
-      const savedSongs = localStorage.getItem(STORAGE_KEY);
-      if (savedSongs) {
-        try {
-          const parsedSongs = JSON.parse(savedSongs) as Song[];
-          setSongs(parsedSongs);
-        } catch (parseError) {
-          console.error('Failed to parse saved songs:', parseError);
+      // 首先尝试使用缓存
+      const cachedSongs = getCache<Song[]>('user_songs');
+      if (cachedSongs) {
+        setSongs(cachedSongs);
+        console.log('Fallback to cached songs due to Supabase error in loadSongs');
+      } else {
+        // 如果缓存不存在，尝试使用localStorage作为最后手段
+        const savedSongs = localStorage.getItem(STORAGE_KEY);
+        if (savedSongs) {
+          try {
+            const parsedSongs = JSON.parse(savedSongs) as Song[];
+            setSongs(parsedSongs);
+            // 将localStorage的数据设置到缓存中
+            setCache('user_songs', parsedSongs);
+          } catch (parseError) {
+            console.error('Failed to parse saved songs:', parseError);
+            setSongs([]);
+          }
+        } else {
           setSongs([]);
         }
-      } else {
-        setSongs([]);
       }
     }
   };
@@ -202,7 +245,11 @@ const App: React.FC = () => {
     if (window.confirm('确定要删除这首歌曲吗？')) {
       try {
         await deleteSong(songId);
-        setSongs(prevSongs => prevSongs.filter(song => song.id !== songId));
+        // 更新本地状态
+        const updatedSongs = songs.filter(song => song.id !== songId);
+        setSongs(updatedSongs);
+        // 同步更新缓存
+        setCache('user_songs', updatedSongs);
       } catch (error) {
         console.error('Failed to delete song:', error);
       }
@@ -282,7 +329,10 @@ const App: React.FC = () => {
       // Add to Supabase（现在会抛出错误而不是返回null）
       const addedSong = await addSong(newSong);
       // 只有当歌曲成功添加到Supabase后，才更新本地状态
-      setSongs(prev => [addedSong, ...prev]);
+      const updatedSongs = [addedSong, ...songs];
+      setSongs(updatedSongs);
+      // 同步更新缓存
+      setCache('user_songs', updatedSongs);
     } catch (error) {
       console.error('添加歌曲失败:', error);
       throw error;
@@ -293,18 +343,46 @@ const App: React.FC = () => {
     try {
       // Update in Supabase
       await updateSong(updatedSong.id, updatedSong);
-      // Update local state
-      setSongs(prevSongs => {
-        return prevSongs.map(song => 
-          song.id === updatedSong.id ? updatedSong : song
-        );
-      });
+      // Update local state and cache
+      const updatedSongs = songs.map(song => 
+        song.id === updatedSong.id ? updatedSong : song
+      );
+      setSongs(updatedSongs);
+      // 同步更新缓存
+      setCache('user_songs', updatedSongs);
     } catch (error) {
       console.error('Failed to update song:', error);
     }
   };
 
-  const handleBulkImport = async (lines: string[], enableSmartMatch: boolean = true) => {
+  const handleUpdateAlbum = async (oldAlbumName: string, newAlbumName: string) => {
+    try {
+      // 获取所有属于该专辑的歌曲
+      const albumSongs = songs.filter(song => song.album === oldAlbumName);
+      
+      // 批量更新数据库
+      for (const song of albumSongs) {
+        const updatedSong = { ...song, album: newAlbumName };
+        await updateSong(song.id, updatedSong);
+      }
+      
+      // 更新本地状态和缓存
+      const updatedSongs = songs.map(song => 
+        song.album === oldAlbumName ? { ...song, album: newAlbumName } : song
+      );
+      setSongs(updatedSongs);
+      // 同步更新缓存
+      setCache('user_songs', updatedSongs);
+      
+      // 显示成功消息
+      alert(`成功将专辑 "${oldAlbumName}" 修改为 "${newAlbumName}"，共更新了 ${albumSongs.length} 首歌曲`);
+    } catch (error) {
+      console.error('Failed to update album:', error);
+      alert('更新专辑名称失败，请稍后重试');
+    }
+  };
+
+  const handleBulkImport = async (lines: string[]) => {
     const newSongs: Song[] = [];
     const importErrors: string[] = [];
     
@@ -354,55 +432,7 @@ const App: React.FC = () => {
                   Date.now()
               };
               
-              // 如果启用了智能匹配且没有提供图片URL，尝试获取更多信息
-              if (enableSmartMatch && !songInfo.coverUrl) {
-                try {
-                  // 添加API调用延迟，避免频繁请求
-                  await delay(300);
-                  
-                  // 先尝试国内版搜索
-                  const domesticResults = await musicApi.search({
-                    keyword: `${songInfo.title} ${artists.join(' ')}`,
-                    apiType: 'itunes-domestic',
-                    limit: 5
-                  });
-                  
-                  // 严格匹配：歌名和歌手都需要匹配
-                  const matchedSong = domesticResults.find(song => {
-                    const songNameMatch = song.name.toLowerCase().includes(songInfo.title.toLowerCase());
-                    const artistMatch = song.artist.toLowerCase().includes(artists.join(' ').toLowerCase());
-                    return songNameMatch && artistMatch;
-                  });
-                  
-                  if (matchedSong) {
-                    // 使用国内版完全匹配到的歌曲信息
-                    if (!newSong.coverUrl) newSong.coverUrl = matchedSong.coverUrl || undefined;
-                    if (!newSong.album) newSong.album = matchedSong.album;
-                    if (!newSong.releaseDate) newSong.releaseDate = matchedSong.releaseDate;
-                    console.log(`[${i+1}/${lines.length}] 使用国内版完全匹配到的歌曲信息`);
-                  } else {
-                    // 国内版没有完全匹配，使用国际版第一首歌的数据
-                    const internationalResults = await musicApi.search({
-                      keyword: `${songInfo.title} ${artists.join(' ')}`,
-                      apiType: 'itunes-international',
-                      limit: 1
-                    });
-                    
-                    if (internationalResults.length > 0) {
-                      // 使用国际版第一首歌的信息
-                      const internationalSong = internationalResults[0];
-                      if (!newSong.coverUrl) newSong.coverUrl = internationalSong.coverUrl || undefined;
-                      if (!newSong.album) newSong.album = internationalSong.album;
-                      if (!newSong.releaseDate) newSong.releaseDate = internationalSong.releaseDate;
-                      console.log(`[${i+1}/${lines.length}] 使用国际版第一首歌的信息`);
-                    } else {
-                      console.log(`[${i+1}/${lines.length}] 国际版也没有找到歌曲，使用用户输入的信息`);
-                    }
-                  }
-                } catch (error) {
-                  console.warn(`[${i+1}/${lines.length}] 歌曲信息匹配失败，使用用户输入的信息:`, error);
-                }
-              }
+
               
               newSongs.push(newSong);
               existingSongs.add(songKey); // 更新已存在歌曲集合
@@ -442,58 +472,8 @@ const App: React.FC = () => {
             let coverUrl = '';
             let releaseDate: string | undefined = undefined;
             
-            if (enableSmartMatch) {
-              // 智能匹配歌曲信息：先尝试国内版，如果没有完全匹配就使用国际版第一首歌
-              try {
-                // 添加API调用延迟，避免频繁请求
-                await delay(300);
-                
-                // 先尝试国内版搜索
-                const domesticResults = await musicApi.search({
-                    keyword: `${title} ${artists.join(' ')}`,
-                    apiType: 'itunes-domestic',
-                    limit: 5
-                  });
-                
-                // 严格匹配：歌名和歌手都需要匹配
-                const matchedSong = domesticResults.find(song => {
-                  const songNameMatch = song.name.toLowerCase().includes(title.toLowerCase());
-                  const artistMatch = song.artist.toLowerCase().includes(artists.join(' ').toLowerCase());
-                  return songNameMatch && artistMatch;
-                });
-                
-                if (matchedSong) {
-                  // 使用国内版完全匹配到的歌曲信息
-                  coverUrl = matchedSong.coverUrl || '';
-                  matchedAlbum = matchedSong.album;
-                  releaseDate = matchedSong.releaseDate;
-                  console.log(`[${i+1}/${lines.length}] 使用国内版完全匹配到的歌曲信息`);
-                } else {
-                  // 国内版没有完全匹配，使用国际版第一首歌的数据
-                  const internationalResults = await musicApi.search({
-                    keyword: `${title} ${artists.join(' ')}`,
-                    apiType: 'itunes-international',
-                    limit: 1
-                  });
-                  
-                  if (internationalResults.length > 0) {
-                    // 使用国际版第一首歌的信息
-                    const internationalSong = internationalResults[0];
-                    coverUrl = internationalSong.coverUrl || '';
-                    matchedAlbum = internationalSong.album;
-                    releaseDate = internationalSong.releaseDate;
-                    console.log(`[${i+1}/${lines.length}] 使用国际版第一首歌的信息`);
-                  } else {
-                    console.log(`[${i+1}/${lines.length}] 国际版也没有找到歌曲，使用用户输入的信息`);
-                  }
-                }
-              } catch (error) {
-                console.warn(`[${i+1}/${lines.length}] 歌曲信息匹配失败，使用用户输入的信息:`, error);
-              }
-            } else {
-              // 不启用智能匹配，使用用户输入的基本信息
-              console.log(`[${i+1}/${lines.length}] 跳过智能匹配，使用用户输入的信息`);
-            }
+            // 不使用智能匹配，直接使用用户输入的信息
+            console.log(`[${i+1}/${lines.length}] 使用用户输入的信息`);
             
             // 传统格式导入不支持添加时间字段，使用当前时间
             newSongs.push({
@@ -521,8 +501,11 @@ const App: React.FC = () => {
       try {
         // 使用批量添加功能添加所有新歌曲到Supabase
         const addedSongs = await addSongs(newSongs);
-        // Update local state
-        setSongs(prev => [...addedSongs, ...prev]);
+        // Update local state and cache
+        const updatedSongs = [...addedSongs, ...songs];
+        setSongs(updatedSongs);
+        // 同步更新缓存
+        setCache('user_songs', updatedSongs);
         
         // 显示导入结果
         const successMessage = `成功导入 ${addedSongs.length} 首歌曲`;
@@ -897,6 +880,7 @@ const App: React.FC = () => {
                 onArtistClick={navigateToArtistDetail}
                 onDeleteSong={handleDeleteSong}
                 onSongClick={navigateToSongDetail}
+                onUpdateAlbum={handleUpdateAlbum}
             />
         )}
 
