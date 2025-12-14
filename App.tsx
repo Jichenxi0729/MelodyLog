@@ -31,6 +31,8 @@ const App: React.FC = () => {
   const [view, setView] = useState<ViewState>({ type: 'HOME' });
   const [navigationHistory, setNavigationHistory] = useState<ViewState[]>([{ type: 'HOME' }]);
   
+  // Navigation functions
+  
   // Modals
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
@@ -205,11 +207,26 @@ const App: React.FC = () => {
 
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
-      result = result.filter(s => 
-        s.title.toLowerCase().includes(q) || 
-        s.artists.some(artist => artist.toLowerCase().includes(q)) ||
-        (s.album && s.album.toLowerCase().includes(q))
-      );
+      // 检查是否是年份搜索（4位数字）
+      const isYearSearch = /^\d{4}$/.test(searchQuery);
+      
+      result = result.filter(s => {
+        // 年份搜索逻辑
+        if (isYearSearch) {
+          if (s.releaseDate) {
+            const songYear = typeof s.releaseDate === 'string' && !isNaN(Number(s.releaseDate)) 
+              ? Number(s.releaseDate) 
+              : new Date(s.releaseDate).getFullYear();
+            return songYear === Number(searchQuery);
+          }
+          return false;
+        }
+        
+        // 常规搜索逻辑
+        return s.title.toLowerCase().includes(q) || 
+          s.artists.some(artist => artist.toLowerCase().includes(q)) ||
+          (s.album && s.album.toLowerCase().includes(q));
+      });
     }
 
     // Sort based on selected configuration
@@ -257,8 +274,8 @@ const App: React.FC = () => {
   };
 
   const handleAddSong = async (title: string, artist: string, album: string, coverUrl?: string, releaseDate?: string) => {
-    // 将歌手字符串分割为数组，支持逗号、顿号、斜杠分隔
-    const artists = artist.split(/[,，、\/]/).map(a => a.trim()).filter(a => a.length > 0);
+    // 将歌手字符串分割为数组，支持逗号、顿号、斜杠、& 符号分隔
+    const artists = artist.split(/[,，、\/&]/).map(a => a.trim()).filter(a => a.length > 0);
     
     // 使用传入的歌曲信息，保留用户选择的平台数据
     let matchedCoverUrl = coverUrl || '';
@@ -286,7 +303,10 @@ const App: React.FC = () => {
         if (matchedSong) {
           // 使用国内版完全匹配到的歌曲信息
           matchedCoverUrl = matchedSong.coverUrl || '';
-          matchedAlbum = matchedSong.album;
+          // 只有当用户没有手动输入专辑时，才使用API获取的专辑信息
+          if (!album.trim()) {
+            matchedAlbum = matchedSong.album;
+          }
           matchedReleaseDate = matchedSong.releaseDate; // 使用匹配到的发行日期
           console.log('使用国内版完全匹配到的歌曲信息');
         } else {
@@ -301,7 +321,10 @@ const App: React.FC = () => {
             // 使用国际版第一首歌的信息
             const internationalSong = internationalResults[0];
             matchedCoverUrl = internationalSong.coverUrl || '';
-            matchedAlbum = internationalSong.album;
+            // 只有当用户没有手动输入专辑时，才使用API获取的专辑信息
+            if (!album.trim()) {
+              matchedAlbum = internationalSong.album;
+            }
             matchedReleaseDate = internationalSong.releaseDate; // 使用国际版的发行日期
             console.log('使用国际版第一首歌的信息');
           } else {
@@ -458,8 +481,8 @@ const App: React.FC = () => {
               artist = artist.replace(/\((.+?)\)$/, '').trim();
             }
             
-            // 将歌手字符串分割为数组，支持逗号、顿号、斜杠分隔
-            const artists = artist.split(/[,，、\/]/).map(a => a.trim()).filter(a => a.length > 0);
+            // 将歌手字符串分割为数组，支持逗号、顿号、斜杠、& 符号分隔
+            const artists = artist.split(/[,，、\/&]/).map(a => a.trim()).filter(a => a.length > 0);
             
             // 去重检查
             const songKey = `${title.toLowerCase()}|||${artists.join(',').toLowerCase()}`;
@@ -524,10 +547,12 @@ const App: React.FC = () => {
   };
 
   // Navigation Handlers
-  const navigateTo = (newView: ViewState) => {
+  const navigateTo = (newView: ViewState, scrollToTop = true) => {
     setNavigationHistory(prev => [...prev, newView]);
     setView(newView);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    if (scrollToTop) {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
   };
 
   const navigateBack = () => {
@@ -608,9 +633,22 @@ const App: React.FC = () => {
                   placeholder="搜索歌曲、歌手或专辑..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-light focus:border-brand-light outline-none text-sm"
+                  className="w-full pl-10 pr-10 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-light focus:border-brand-light outline-none text-sm"
                   disabled={!user}
                 />
+                {/* Clear search button */}
+                {searchQuery && (
+                  <button
+                    onClick={() => setSearchQuery('')}
+                    className="absolute right-3 top-1/2 transform -translate-y-1/2 text-slate-400 hover:text-slate-600 focus:outline-none"
+                    aria-label="清除搜索"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <line x1="18" y1="6" x2="6" y2="18"></line>
+                      <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                  </button>
+                )}
               </div>
               
               {/* User Menu */}
@@ -807,6 +845,7 @@ const App: React.FC = () => {
                     onAlbumClick={navigateToAlbumDetail}
                     onDelete={() => handleDeleteSong(song.id)}
                     onSongClick={navigateToSongDetail}
+                    onYearSearch={(year) => setSearchQuery(year.toString())}
                 />
               ))
             ) : (

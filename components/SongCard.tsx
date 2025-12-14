@@ -15,9 +15,10 @@ interface SongCardProps {
   onAlbumClick?: (album: string) => void;
   onDelete?: () => void;
   onSongClick?: (songId: string) => void;
+  onYearSearch?: (year: number) => void;
 }
 
-export const SongCard: React.FC<SongCardProps> = ({ song, onArtistClick, onAlbumClick, onDelete, onSongClick }) => {
+export const SongCard: React.FC<SongCardProps> = ({ song, onArtistClick, onAlbumClick, onDelete, onSongClick, onYearSearch }) => {
   // 更新添加时间格式，包含年份信息
   const formattedDate = new Date(song.addedAt).toLocaleDateString('zh-CN', {
     year: 'numeric',
@@ -90,16 +91,23 @@ export const SongCard: React.FC<SongCardProps> = ({ song, onArtistClick, onAlbum
           {song.album && (
             <span 
               onClick={handleAlbumClick}
-              className="flex items-center gap-0.5 truncate max-w-[120px] cursor-pointer hover:text-brand-light hover:underline transition-colors"
+              className="flex items-center gap-0.5 truncate cursor-pointer hover:text-brand-light hover:underline transition-colors"
               title={`查看专辑: ${song.album}`}
             >
               <Disc size={9} /> {song.album}
             </span>
           )}
           {releaseYear && (
-            <span className="flex items-center gap-0.5 text-slate-400">
-              <Calendar size={9} /> {releaseYear}
-            </span>
+            <span 
+            onClick={(e) => {
+              e.stopPropagation();
+              onYearSearch?.(releaseYear as number);
+            }}
+            className="flex items-center gap-0.5 text-slate-400 cursor-pointer hover:text-brand-light hover:underline transition-colors"
+            title={`搜索 ${releaseYear} 年的所有歌曲`}
+          >
+            <Calendar size={9} /> {releaseYear}
+          </span>
           )}
         </div>
       </div>

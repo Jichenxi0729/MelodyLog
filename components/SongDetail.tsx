@@ -96,7 +96,8 @@ export const SongDetail: React.FC<SongDetailProps> = ({ songs, songId, onBack, o
   // 状态管理
   const [song, setSong] = useState<Song | null>(null);
   const [lyrics, setLyrics] = useState<string[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(true); // 初始加载状态
+  const [buttonLoading, setButtonLoading] = useState(false); // 按钮点击加载状态
   const [selectedLyrics, setSelectedLyrics] = useState<string[]>([]);
   const [showShareModal, setShowShareModal] = useState(false);
   const [showSavedLyrics, setShowSavedLyrics] = useState(false);
@@ -121,6 +122,7 @@ export const SongDetail: React.FC<SongDetailProps> = ({ songs, songId, onBack, o
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
+  // 仅在songId变化时运行，用于获取歌曲详情和初始歌词
   useEffect(() => {
     if (songId) {
       const foundSong = songs.find(s => s.id === songId);
@@ -164,6 +166,16 @@ export const SongDetail: React.FC<SongDetailProps> = ({ songs, songId, onBack, o
           console.error('解析保存的歌词失败:', error);
           localStorage.removeItem(`savedLyrics_${songId}`);
         }
+      }
+    }
+  }, [songId]);
+  
+  // 当songs变化时，仅更新当前歌曲信息，不重新获取歌词
+  useEffect(() => {
+    if (songId) {
+      const foundSong = songs.find(s => s.id === songId);
+      if (foundSong) {
+        setSong(foundSong);
       }
     }
   }, [songId, songs]);
@@ -538,7 +550,7 @@ export const SongDetail: React.FC<SongDetailProps> = ({ songs, songId, onBack, o
         </section>
 
         {/* 收藏歌词区域 */}
-        <section className="bg-blue-50/20 rounded-xl p-3 shadow-md mb-4">
+        <section className="bg-blue-50/20 rounded-xl p-3 shadow-md transform hover:shadow-lg transition-shadow duration-300 mb-4">
           <div className="flex justify-between items-center mb-3">
             <h2 className="text-base font-semibold text-gray-800 flex items-center gap-2">
               <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-pink-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -602,7 +614,7 @@ export const SongDetail: React.FC<SongDetailProps> = ({ songs, songId, onBack, o
         </section>
 
         {/* 歌词展示区域 */}
-        <section className="bg-blue-50/20 rounded-xl p-3 shadow-md min-h-[300px] mb-4">
+        <section className="bg-blue-50/20 rounded-xl p-3 shadow-md transform hover:shadow-lg transition-shadow duration-300 min-h-[300px] mb-4">
           <div className="flex justify-between items-center mb-3">
             <h2 className="text-base font-semibold text-gray-800 flex items-center gap-2">
               <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -611,11 +623,23 @@ export const SongDetail: React.FC<SongDetailProps> = ({ songs, songId, onBack, o
               歌词
             </h2>
             <button 
-              onClick={() => song && fetchLyrics(song.title, song.artists[0])}
-              disabled={loading}
+              onClick={async () => {
+                if (song) {
+                  try {
+                    setButtonLoading(true);
+                    const lyricsData = await fetchLyrics(song.title, song.artists[0], 'qq');
+                    setLyrics(lyricsData);
+                  } catch (error) {
+                    console.error('Failed to fetch lyrics:', error);
+                  } finally {
+                    setButtonLoading(false);
+                  }
+                }
+              }}
+              disabled={buttonLoading}
               className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-full transition-colors font-medium text-xs flex items-center gap-1"
             >
-              {loading ? (
+              {buttonLoading ? (
                 <>
                   <div className="animate-spin h-3 w-3 border-2 border-white border-opacity-20 border-t-white rounded-full"></div>
                   获取中...

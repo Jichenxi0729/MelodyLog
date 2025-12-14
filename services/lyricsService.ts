@@ -59,8 +59,8 @@ const saveLyricsToCache = (key: string, type: 'lyrics' | 'lyricsWithTime', data:
 };
 
 // 歌词API服务
-export const fetchLyrics = async (songTitle: string, artist?: string): Promise<string[]> => {
-  const cacheKey = `${songTitle.trim().toLowerCase()}_${artist || ''}`;
+export const fetchLyrics = async (songTitle: string, artist?: string, platform: 'netease' | 'qq' = 'netease'): Promise<string[]> => {
+  const cacheKey = `${platform}_${songTitle.trim().toLowerCase()}_${artist || ''}`;
   
   // 检查缓存
   const cachedData = getLyricsFromCache(cacheKey, 'lyrics');
@@ -70,20 +70,24 @@ export const fetchLyrics = async (songTitle: string, artist?: string): Promise<s
   
   try {
     // 调用Lokua的歌词API
-    console.log(`[API] 获取歌词: ${songTitle}${artist ? ` - ${artist}` : ''}`);
+    console.log(`[API] ${platform === 'qq' ? 'QQ音乐' : '网易云音乐'} 获取歌词: ${songTitle}${artist ? ` - ${artist}` : ''}`);
     
-    // 使用网易云音乐接口，因为它是最常用的
-    const response = await fetch(`https://lokuamusic.top/api/netease?input=${encodeURIComponent(songTitle + (artist ? ` ${artist}` : ''))}&filter=name&page=1`);
+    // 根据平台选择API
+    const apiUrl = platform === 'qq' 
+      ? `https://lokuamusic.top/api/qq?input=${encodeURIComponent(songTitle + (artist ? ` ${artist}` : ''))}&filter=name&page=1`
+      : `https://lokuamusic.top/api/netease?input=${encodeURIComponent(songTitle + (artist ? ` ${artist}` : ''))}&filter=name&page=1`;
+    
+    const response = await fetch(apiUrl);
     
     if (!response.ok) {
-      throw new Error('Failed to fetch lyrics from Lokua API');
+      throw new Error(`Failed to fetch lyrics from ${platform === 'qq' ? 'QQ音乐' : '网易云音乐'} API`);
     }
     
     const data = await response.json();
     
     // 检查是否返回了歌曲列表
     if (data.code === 200 && data.data && data.data.length > 0) {
-      console.log('Received song list from Lokua API');
+      console.log(`Received song list from ${platform === 'qq' ? 'QQ音乐' : '网易云音乐'} API`);
       
       let selectedSong = data.data[0]; // 默认选择第一首
       
@@ -141,8 +145,8 @@ export const fetchLyrics = async (songTitle: string, artist?: string): Promise<s
 };
 
 // 获取带时间戳的歌词（如果需要）
-export const fetchLyricsWithTime = async (songTitle: string, artist?: string): Promise<Array<{ time: string; text: string }>> => {
-  const cacheKey = `${songTitle.trim().toLowerCase()}_${artist || ''}`;
+export const fetchLyricsWithTime = async (songTitle: string, artist?: string, platform: 'netease' | 'qq' = 'netease'): Promise<Array<{ time: string; text: string }>> => {
+  const cacheKey = `${platform}_${songTitle.trim().toLowerCase()}_${artist || ''}`;
   
   // 检查缓存
   const cachedData = getLyricsFromCache(cacheKey, 'lyricsWithTime');
@@ -151,20 +155,24 @@ export const fetchLyricsWithTime = async (songTitle: string, artist?: string): P
   }
   
   try {
-    console.log(`[API] 获取带时间戳歌词: ${songTitle}${artist ? ` - ${artist}` : ''}`);
+    console.log(`[API] ${platform === 'qq' ? 'QQ音乐' : '网易云音乐'} 获取带时间戳歌词: ${songTitle}${artist ? ` - ${artist}` : ''}`);
     
-    // 使用网易云音乐接口，因为它是最常用的
-    const response = await fetch(`https://lokuamusic.top/api/netease?input=${encodeURIComponent(songTitle + (artist ? ` ${artist}` : ''))}&filter=name&page=1`);
+    // 根据平台选择API
+    const apiUrl = platform === 'qq' 
+      ? `https://lokuamusic.top/api/qq?input=${encodeURIComponent(songTitle + (artist ? ` ${artist}` : ''))}&filter=name&page=1`
+      : `https://lokuamusic.top/api/netease?input=${encodeURIComponent(songTitle + (artist ? ` ${artist}` : ''))}&filter=name&page=1`;
+    
+    const response = await fetch(apiUrl);
     
     if (!response.ok) {
-      throw new Error('Failed to fetch lyrics with time from Lokua API');
+      throw new Error(`Failed to fetch lyrics with time from ${platform === 'qq' ? 'QQ音乐' : '网易云音乐'} API`);
     }
     
     const data = await response.json();
     
     // 检查是否返回了歌曲列表
     if (data.code === 200 && data.data && data.data.length > 0) {
-      console.log('Received song list from Lokua API');
+      console.log(`Received song list from ${platform === 'qq' ? 'QQ音乐' : '网易云音乐'} API`);
       
       let selectedSong = data.data[0]; // 默认选择第一首
       

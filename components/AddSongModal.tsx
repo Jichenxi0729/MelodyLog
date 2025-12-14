@@ -23,7 +23,7 @@ export const AddSongModal: React.FC<AddSongModalProps> = ({ isOpen, onClose, onA
   const [isSearching, setIsSearching] = useState(false);
   const [selectedSong, setSelectedSong] = useState<SongInfo | null>(null);
   const [showSearchResults, setShowSearchResults] = useState(false);
-  const [activeTab, setActiveTab] = useState<'search' | 'manual'>('manual'); // 默认切换到手动输入
+  const [activeTab, setActiveTab] = useState<'search' | 'manual'>('search'); // 默认切换到智能搜索
   const [searchError, setSearchError] = useState(''); // 搜索平台状态
   const [searchPlatform, setSearchPlatform] = useState<'itunes-domestic' | 'itunes-international' | 'netease' | 'qq'>('itunes-domestic'); // 搜索平台选择
 
@@ -37,7 +37,7 @@ export const AddSongModal: React.FC<AddSongModalProps> = ({ isOpen, onClose, onA
       setSearchResults([]);
       setSelectedSong(null);
       setShowSearchResults(false);
-      setActiveTab('manual'); // 默认切换到手动输入
+      setActiveTab('search'); // 默认切换到智能搜索
       setSearchError(''); // 重置搜索错误
     }
   }, [isOpen]);
@@ -281,16 +281,6 @@ export const AddSongModal: React.FC<AddSongModalProps> = ({ isOpen, onClose, onA
         {/* 标签页切换 */}
         <div className="flex border-b border-gray-200 bg-gray-50">
           <button
-            onClick={() => setActiveTab('manual')}
-            className={`flex-1 py-3 text-sm font-medium transition-colors ${
-              activeTab === 'manual' 
-                ? 'text-brand-light border-b-2 border-brand-light' 
-                : 'text-gray-500 hover:text-gray-700'
-            }`}
-          >
-            手动输入
-          </button>
-          <button
             onClick={() => setActiveTab('search')}
             className={`flex-1 py-3 text-sm font-medium transition-colors ${
               activeTab === 'search' 
@@ -299,6 +289,16 @@ export const AddSongModal: React.FC<AddSongModalProps> = ({ isOpen, onClose, onA
             }`}
           >
             智能搜索
+          </button>
+          <button
+            onClick={() => setActiveTab('manual')}
+            className={`flex-1 py-3 text-sm font-medium transition-colors ${
+              activeTab === 'manual' 
+                ? 'text-brand-light border-b-2 border-brand-light' 
+                : 'text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            手动输入
           </button>
         </div>
 

@@ -8,6 +8,7 @@ interface AlbumLibraryProps {
 }
 
 export const AlbumLibrary: React.FC<AlbumLibraryProps> = ({ songs, onSelectAlbum }) => {
+  
   const albumsData = useMemo(() => {
     const map = new Map<string, { count: number; year?: string; coverUrl?: string; artists: Set<string> }>();
     
@@ -44,7 +45,14 @@ export const AlbumLibrary: React.FC<AlbumLibraryProps> = ({ songs, onSelectAlbum
         count: info.count,
         year: info.year,
         coverUrl: info.coverUrl,
-        artists: Array.from(info.artists).join('、')
+        artists: (() => {
+          const artistArray = Array.from(info.artists);
+          if (artistArray.length <= 2) {
+            return artistArray.join('、');
+          } else {
+            return `${artistArray[0]}、${artistArray[1]}等`;
+          }
+        })()
       }))
       .sort((a, b) => {
         // 首先按年份排序（降序）
@@ -58,13 +66,15 @@ export const AlbumLibrary: React.FC<AlbumLibraryProps> = ({ songs, onSelectAlbum
       });
   }, [songs]);
 
+
+
   return (
     <div className="animate-in fade-in duration-300">
       <h2 className="text-xl font-bold text-slate-800 mb-6 flex items-center gap-2">
         <Music className="text-brand-light" /> 专辑库 ({albumsData.length})
       </h2>
       
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-3 gap-4 max-h-[calc(100vh-120px)] overflow-y-auto">
         {albumsData.map(({ name, count, year, coverUrl, artists }) => (
           <div key={name} className="group">
             {/* 专辑封面 - 适当放大尺寸，去除边框 */}
