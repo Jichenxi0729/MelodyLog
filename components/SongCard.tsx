@@ -64,7 +64,7 @@ export const SongCard: React.FC<SongCardProps> = ({ song, onArtistClick, onAlbum
       {/* Info */}
       <div className="flex-1 min-w-0 ml-2 flex flex-col justify-center h-full py-0.5 space-y-0.5">
         <div className="flex items-baseline justify-between">
-          <h3 className="text-sm font-bold text-slate-800 truncate pr-2 md:pr-2" title={song.title}>
+          <h3 className="text-sm font-bold text-slate-800 truncate pr-2 md:pr-2 max-w-[16rem]" title={song.title}>
             {song.title}
           </h3>
         </div>
@@ -89,9 +89,9 @@ export const SongCard: React.FC<SongCardProps> = ({ song, onArtistClick, onAlbum
         {/* Metadata Row */}
         <div className="flex items-center gap-2 text-[10px] text-slate-500">
           {song.album && (
-            <span 
+            <span
               onClick={handleAlbumClick}
-              className="flex items-center gap-0.5 truncate cursor-pointer hover:text-brand-light hover:underline transition-colors"
+              className="flex items-center gap-0.5 cursor-pointer hover:text-brand-light hover:underline transition-colors max-w-[16rem] truncate"
               title={`查看专辑: ${song.album}`}
             >
               <Disc size={9} /> {song.album}
