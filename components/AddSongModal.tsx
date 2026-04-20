@@ -6,14 +6,15 @@ interface AddSongModalProps {
   isOpen: boolean;
   onClose: () => void;
   onAdd: (title: string, artist: string, album: string, coverUrl?: string, releaseDate?: string) => Promise<void>;
-  songs: any[]; // 添加歌曲列表用于重复检测
+  songs: any[];
 }
 
 export const AddSongModal: React.FC<AddSongModalProps> = ({ isOpen, onClose, onAdd, songs }) => {
-  // 所有Hooks必须在条件返回之前调用
   const [title, setTitle] = useState('');
   const [artist, setArtist] = useState('');
   const [album, setAlbum] = useState('');
+  const [coverUrl, setCoverUrl] = useState('');
+  const [releaseDate, setReleaseDate] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [isDuplicate, setIsDuplicate] = useState(false);
   
@@ -27,18 +28,19 @@ export const AddSongModal: React.FC<AddSongModalProps> = ({ isOpen, onClose, onA
   const [searchError, setSearchError] = useState(''); // 搜索平台状态
   const [searchPlatform, setSearchPlatform] = useState<'itunes-domestic' | 'itunes-international' | 'netease' | 'qq'>('itunes-domestic'); // 搜索平台选择
 
-  // 重置状态
   useEffect(() => {
     if (isOpen) {
       setTitle('');
       setArtist('');
       setAlbum('');
+      setCoverUrl('');
+      setReleaseDate('');
       setSearchKeyword('');
       setSearchResults([]);
       setSelectedSong(null);
       setShowSearchResults(false);
-      setActiveTab('search'); // 默认切换到智能搜索
-      setSearchError(''); // 重置搜索错误
+      setActiveTab('search');
+      setSearchError('');
     }
   }, [isOpen]);
 
@@ -190,44 +192,42 @@ export const AddSongModal: React.FC<AddSongModalProps> = ({ isOpen, onClose, onA
         platform: selectedSong.platform
       });
     } else {
-      // 只有手动输入时，才进行智能匹配
-      try {
-        // 先尝试国内版搜索
-        const domesticResults = await musicApi.search({
-          keyword: `${title} ${artist}`,
-          apiType: 'itunes-domestic',
-          limit: 5
-        });
-        
-        // 严格匹配：歌名和歌手都需要匹配
-        const matchedSong = domesticResults.find(song => {
-          const songNameMatch = song.name.toLowerCase().includes(title.toLowerCase());
-          const artistMatch = song.artist.toLowerCase().includes(artist.toLowerCase());
-          return songNameMatch && artistMatch;
-        });
-        
-        if (matchedSong) {
-            // 使用国内版完全匹配到的歌曲信息
+      // 手动输入模式
+      // 如果用户手动输入了封面URL或发行日期，直接使用，不再进行API匹配
+      if (coverUrl || releaseDate) {
+        console.log('使用用户手动输入的歌曲信息（封面URL或发行日期）');
+      } else {
+        // 只有在用户没有输入封面和发行日期时，才尝试API匹配
+        try {
+          const domesticResults = await musicApi.search({
+            keyword: `${title} ${artist}`,
+            apiType: 'itunes-domestic',
+            limit: 5
+          });
+
+          const matchedSong = domesticResults.find(song => {
+            const songNameMatch = song.name.toLowerCase().includes(title.toLowerCase());
+            const artistMatch = song.artist.toLowerCase().includes(artist.toLowerCase());
+            return songNameMatch && artistMatch;
+          });
+
+          if (matchedSong) {
             coverUrl = matchedSong.coverUrl || '';
-            // 只有当用户没有手动输入专辑时，才使用API获取的专辑信息
             if (!album.trim()) {
               matchedAlbum = matchedSong.album;
             }
             releaseDate = matchedSong.releaseDate;
             console.log('使用国内版完全匹配到的歌曲信息');
           } else {
-            // 国内版没有完全匹配，使用国际版第一首歌的数据
             const internationalResults = await musicApi.search({
               keyword: `${title} ${artist}`,
               apiType: 'itunes-international',
               limit: 1
             });
-            
+
             if (internationalResults.length > 0) {
-              // 使用国际版第一首歌的信息
               const internationalSong = internationalResults[0];
               coverUrl = internationalSong.coverUrl || '';
-              // 只有当用户没有手动输入专辑时，才使用API获取的专辑信息
               if (!album.trim()) {
                 matchedAlbum = internationalSong.album;
               }
@@ -237,8 +237,9 @@ export const AddSongModal: React.FC<AddSongModalProps> = ({ isOpen, onClose, onA
               console.log('国际版也没有找到歌曲，使用用户输入的信息');
             }
           }
-      } catch (error) {
-        console.warn('歌曲信息匹配失败，使用用户输入的信息:', error);
+        } catch (error) {
+          console.warn('歌曲信息匹配失败，使用用户输入的信息:', error);
+        }
       }
     }
     
@@ -250,6 +251,8 @@ export const AddSongModal: React.FC<AddSongModalProps> = ({ isOpen, onClose, onA
     setTitle('');
     setArtist('');
     setAlbum('');
+    setCoverUrl('');
+    setReleaseDate('');
     setSearchKeyword('');
     setSearchResults([]);
     setSelectedSong(null);
@@ -506,6 +509,38 @@ export const AddSongModal: React.FC<AddSongModalProps> = ({ isOpen, onClose, onA
                         value={album}
                         onChange={(e) => setAlbum(e.target.value)}
                         placeholder="输入专辑名称（可选）"
+                        className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-light focus:border-brand-light outline-none transition-all"
+                      />
+                    </div>
+
+                    <div>
+                      <div className="flex items-center gap-2 mb-1">
+                        <svg width={16} height={16} className="text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                        </svg>
+                        <span className="text-sm text-slate-600">封面图片URL</span>
+                      </div>
+                      <input
+                        type="text"
+                        value={coverUrl}
+                        onChange={(e) => setCoverUrl(e.target.value)}
+                        placeholder="输入封面图片链接（可选）"
+                        className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-light focus:border-brand-light outline-none transition-all"
+                      />
+                    </div>
+
+                    <div>
+                      <div className="flex items-center gap-2 mb-1">
+                        <svg width={16} height={16} className="text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                        </svg>
+                        <span className="text-sm text-slate-600">发行日期</span>
+                      </div>
+                      <input
+                        type="text"
+                        value={releaseDate}
+                        onChange={(e) => setReleaseDate(e.target.value)}
+                        placeholder="输入发行日期，如2024-01-01（可选）"
                         className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-light focus:border-brand-light outline-none transition-all"
                       />
                     </div>

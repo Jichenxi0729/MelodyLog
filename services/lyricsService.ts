@@ -69,45 +69,38 @@ export const fetchLyrics = async (songTitle: string, artist?: string, platform: 
   }
   
   try {
-    // 调用Lokua的歌词API
+    // 调用TuneHub的歌词API
     console.log(`[API] ${platform === 'qq' ? 'QQ音乐' : '网易云音乐'} 获取歌词: ${songTitle}${artist ? ` - ${artist}` : ''}`);
     
-    // 根据平台选择API
-    const apiUrl = platform === 'qq' 
-      ? `https://lokuamusic.top/api/qq?input=${encodeURIComponent(songTitle + (artist ? ` ${artist}` : ''))}&filter=name&page=1`
-      : `https://lokuamusic.top/api/netease?input=${encodeURIComponent(songTitle + (artist ? ` ${artist}` : ''))}&filter=name&page=1`;
+    // 先搜索歌曲ID
+    const searchUrl = `https://music-dl.sayqz.com/api/?source=${platform}&type=search&keyword=${encodeURIComponent(songTitle + (artist ? ` ${artist}` : ''))}&limit=1`;
+    const searchResponse = await fetch(searchUrl);
     
-    const response = await fetch(apiUrl);
-    
-    if (!response.ok) {
-      throw new Error(`Failed to fetch lyrics from ${platform === 'qq' ? 'QQ音乐' : '网易云音乐'} API`);
+    if (!searchResponse.ok) {
+      throw new Error(`Failed to search song from ${platform === 'qq' ? 'QQ音乐' : '网易云音乐'} API`);
     }
     
-    const data = await response.json();
+    const searchData = await searchResponse.json();
     
     // 检查是否返回了歌曲列表
-    if (data.code === 200 && data.data && data.data.length > 0) {
+    if (searchData.code === 200 && searchData.data && searchData.data.results && searchData.data.results.length > 0) {
       console.log(`Received song list from ${platform === 'qq' ? 'QQ音乐' : '网易云音乐'} API`);
       
-      let selectedSong = data.data[0]; // 默认选择第一首
+      const selectedSong = searchData.data.results[0]; // 默认选择第一首
       
-      // 如果有歌手信息，尝试匹配正确的歌曲
-      if (artist) {
-        const artistLower = artist.toLowerCase();
-        const matchedSong = data.data.find((song: any) => 
-          song.author.toLowerCase().includes(artistLower) ||
-          song.title.toLowerCase().includes(artistLower)
-        );
-        if (matchedSong) {
-          selectedSong = matchedSong;
-          console.log(`Found matching song: ${selectedSong.title} - ${selectedSong.author}`);
-        }
+      // 获取歌词
+      const lyricsUrl = `https://music-dl.sayqz.com/api/?source=${platform}&id=${selectedSong.id}&type=lrc`;
+      const lyricsResponse = await fetch(lyricsUrl);
+      
+      if (!lyricsResponse.ok) {
+        throw new Error(`Failed to fetch lyrics from ${platform === 'qq' ? 'QQ音乐' : '网易云音乐'} API`);
       }
       
-      // 解析歌词数据
-      if (selectedSong.lrc) {
-        // 解析LRC格式歌词
-        const lines = selectedSong.lrc.split('\n')
+      const lyricsText = await lyricsResponse.text();
+      
+      // 解析LRC格式歌词
+      if (lyricsText) {
+        const lines = lyricsText.split('\n')
           .map((line: string) => {
             // 移除时间戳
             const textOnly = line.replace(/\[[\d:\.]+\]/g, '').trim();
@@ -157,42 +150,36 @@ export const fetchLyricsWithTime = async (songTitle: string, artist?: string, pl
   try {
     console.log(`[API] ${platform === 'qq' ? 'QQ音乐' : '网易云音乐'} 获取带时间戳歌词: ${songTitle}${artist ? ` - ${artist}` : ''}`);
     
-    // 根据平台选择API
-    const apiUrl = platform === 'qq' 
-      ? `https://lokuamusic.top/api/qq?input=${encodeURIComponent(songTitle + (artist ? ` ${artist}` : ''))}&filter=name&page=1`
-      : `https://lokuamusic.top/api/netease?input=${encodeURIComponent(songTitle + (artist ? ` ${artist}` : ''))}&filter=name&page=1`;
+    // 先搜索歌曲ID
+    const searchUrl = `https://music-dl.sayqz.com/api/?source=${platform}&type=search&keyword=${encodeURIComponent(songTitle + (artist ? ` ${artist}` : ''))}&limit=1`;
+    const searchResponse = await fetch(searchUrl);
     
-    const response = await fetch(apiUrl);
-    
-    if (!response.ok) {
-      throw new Error(`Failed to fetch lyrics with time from ${platform === 'qq' ? 'QQ音乐' : '网易云音乐'} API`);
+    if (!searchResponse.ok) {
+      throw new Error(`Failed to search song from ${platform === 'qq' ? 'QQ音乐' : '网易云音乐'} API`);
     }
     
-    const data = await response.json();
+    const searchData = await searchResponse.json();
     
     // 检查是否返回了歌曲列表
-    if (data.code === 200 && data.data && data.data.length > 0) {
+    if (searchData.code === 200 && searchData.data && searchData.data.results && searchData.data.results.length > 0) {
       console.log(`Received song list from ${platform === 'qq' ? 'QQ音乐' : '网易云音乐'} API`);
       
-      let selectedSong = data.data[0]; // 默认选择第一首
+      const selectedSong = searchData.data.results[0]; // 默认选择第一首
       
-      // 如果有歌手信息，尝试匹配正确的歌曲
-      if (artist) {
-        const artistLower = artist.toLowerCase();
-        const matchedSong = data.data.find((song: any) => 
-          song.author.toLowerCase().includes(artistLower) ||
-          song.title.toLowerCase().includes(artistLower)
-        );
-        if (matchedSong) {
-          selectedSong = matchedSong;
-          console.log(`Found matching song: ${selectedSong.title} - ${selectedSong.author}`);
-        }
+      // 获取歌词
+      const lyricsUrl = `https://music-dl.sayqz.com/api/?source=${platform}&id=${selectedSong.id}&type=lrc`;
+      const lyricsResponse = await fetch(lyricsUrl);
+      
+      if (!lyricsResponse.ok) {
+        throw new Error(`Failed to fetch lyrics from ${platform === 'qq' ? 'QQ音乐' : '网易云音乐'} API`);
       }
       
+      const lyricsText = await lyricsResponse.text();
+      
       // 解析带时间戳的歌词
-      if (selectedSong.lrc) {
+      if (lyricsText) {
         // 解析LRC格式歌词
-        const lines = selectedSong.lrc.split('\n')
+        const lines = lyricsText.split('\n')
           .map((line: string) => line.trim())
           .filter((line: string) => line.length > 0);
         

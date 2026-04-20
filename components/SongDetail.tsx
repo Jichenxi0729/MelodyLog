@@ -110,6 +110,7 @@ export const SongDetail: React.FC<SongDetailProps> = ({ songs, songId, onBack, o
   const [editedTitle, setEditedTitle] = useState('');
   const [editedArtists, setEditedArtists] = useState<string[]>([]);
   const [editedAlbum, setEditedAlbum] = useState('');
+  const [editedCoverUrl, setEditedCoverUrl] = useState('');
   const [editedReleaseDate, setEditedReleaseDate] = useState('');
   
   // 响应式处理
@@ -132,6 +133,7 @@ export const SongDetail: React.FC<SongDetailProps> = ({ songs, songId, onBack, o
         setEditedTitle(foundSong.title);
         setEditedArtists([...foundSong.artists]);
         setEditedAlbum(foundSong.album || '');
+        setEditedCoverUrl(foundSong.coverUrl || '');
         setEditedReleaseDate(foundSong.releaseDate || '');
         
         // 加载歌词
@@ -189,6 +191,7 @@ export const SongDetail: React.FC<SongDetailProps> = ({ songs, songId, onBack, o
       setEditedTitle(song.title);
       setEditedArtists([...song.artists]);
       setEditedAlbum(song.album || '');
+      setEditedCoverUrl(song.coverUrl || '');
       setEditedReleaseDate(song.releaseDate || '');
     }
   };
@@ -200,6 +203,7 @@ export const SongDetail: React.FC<SongDetailProps> = ({ songs, songId, onBack, o
         title: editedTitle,
         artists: editedArtists,
         album: editedAlbum,
+        coverUrl: editedCoverUrl,
         releaseDate: editedReleaseDate
       };
       setSong(updatedSong);
@@ -214,6 +218,7 @@ export const SongDetail: React.FC<SongDetailProps> = ({ songs, songId, onBack, o
       setEditedTitle(song.title);
       setEditedArtists([...song.artists]);
       setEditedAlbum(song.album || '');
+      setEditedCoverUrl(song.coverUrl || '');
       setEditedReleaseDate(song.releaseDate || '');
     }
   };
@@ -461,7 +466,15 @@ export const SongDetail: React.FC<SongDetailProps> = ({ songs, songId, onBack, o
                     placeholder="专辑名称"
                     className="text-xs text-gray-500 mb-1 w-full border-b border-gray-300 focus:border-blue-500 focus:outline-none pb-1"
                   />
-                  
+
+                  <input
+                    type="text"
+                    value={editedCoverUrl}
+                    onChange={(e) => setEditedCoverUrl(e.target.value)}
+                    placeholder="封面图片URL"
+                    className="text-xs text-gray-500 mb-1 w-full border-b border-gray-300 focus:border-blue-500 focus:outline-none pb-1"
+                  />
+
                   <input
                     type="text"
                     value={editedReleaseDate}
