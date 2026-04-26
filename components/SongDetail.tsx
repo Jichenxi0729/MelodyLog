@@ -1,9 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import html2canvas from 'html2canvas';
 import { useNavigate } from 'react-router-dom';
 import { Song } from '../types';
-import { fetchLyrics } from '../services/lyricsService';
-import { ArrowLeft, Share2 } from 'lucide-react';
+import { fetchLyrics, addCustomLyrics, searchLyricsByTitle, fetchLyricsById, saveLyricsToSupabase, convertToSimplified } from '../services/lyricsService';
+import { ArrowLeft, Share2, Plus, Pencil, Search } from 'lucide-react';
+import { LyricsEditor } from './LyricsEditor';
 
 // 添加全局动画样式
 const styleSheet = document.createElement('style');
@@ -113,6 +114,14 @@ export const SongDetail: React.FC<SongDetailProps> = ({ songs, songId, onBack, o
   const [editedCoverUrl, setEditedCoverUrl] = useState('');
   const [editedReleaseDate, setEditedReleaseDate] = useState('');
   
+  // 歌词编辑器状态
+  const [showLyricsEditor, setShowLyricsEditor] = useState(false);
+  
+  // 歌词搜索状态
+  const [showSearchModal, setShowSearchModal] = useState(false);
+  const [searchResults, setSearchResults] = useState<any[]>([]);
+  const [searchLoading, setSearchLoading] = useState(false);
+  
   // 响应式处理
   useEffect(() => {
     const handleResize = () => {
@@ -142,7 +151,7 @@ export const SongDetail: React.FC<SongDetailProps> = ({ songs, songId, onBack, o
             setLoading(true);
             // 使用第一位歌手信息来匹配正确的歌词
             const artist = foundSong.artists[0];
-            const lyricsData = await fetchLyrics(foundSong.title, artist);
+            const lyricsData = await fetchLyrics(foundSong.id, foundSong.title, artist);
             setLyrics(lyricsData);
           } catch (error) {
             console.error('Failed to load lyrics:', error);
@@ -184,8 +193,8 @@ export const SongDetail: React.FC<SongDetailProps> = ({ songs, songId, onBack, o
   
   // 使用props传入的onBack函数，不再使用navigate(-1)
 
-  // 编辑功能函数
-  const handleEdit = () => {
+  // 编辑功能函数 - 使用useCallback优化
+  const handleEdit = useCallback(() => {
     if (song) {
       setIsEditing(true);
       setEditedTitle(song.title);
@@ -194,9 +203,9 @@ export const SongDetail: React.FC<SongDetailProps> = ({ songs, songId, onBack, o
       setEditedCoverUrl(song.coverUrl || '');
       setEditedReleaseDate(song.releaseDate || '');
     }
-  };
+  }, [song]);
 
-  const handleSave = () => {
+  const handleSave = useCallback(() => {
     if (song && onUpdateSong) {
       const updatedSong = {
         ...song,
@@ -210,7 +219,7 @@ export const SongDetail: React.FC<SongDetailProps> = ({ songs, songId, onBack, o
       onUpdateSong(updatedSong);
       setIsEditing(false);
     }
-  };
+  }, [song, editedTitle, editedArtists, editedAlbum, editedCoverUrl, editedReleaseDate, onUpdateSong]);
 
   const handleCancel = () => {
     setIsEditing(false);
@@ -367,10 +376,137 @@ export const SongDetail: React.FC<SongDetailProps> = ({ songs, songId, onBack, o
     }, 2000);
   };
 
-  // 取消选中歌词
-  const handleClearSelection = () => {
-    setSelectedLyrics([]);
+  // 处理保存自定义歌词
+  const handleSaveCustomLyrics = async (lyricsText: string, isLRC: boolean) => {
+    if (!song) return;
+    
+    try {
+      const artistName = song.artists[0];
+      const result = await addCustomLyrics(song.id, song.title, artistName, lyricsText, isLRC);
+      
+      if (result.success) {
+        // 重新获取歌词以更新显示
+        const newLyrics = await fetchLyrics(song.id, song.title, artistName);
+        setLyrics(newLyrics);
+        
+        // 显示成功提示
+        const notification = document.createElement('div');
+        notification.className = 'fixed top-4 right-4 bg-green-600 text-white px-4 py-2 rounded-lg shadow-lg z-50 animate-slide-in';
+        notification.textContent = result.message;
+        document.body.appendChild(notification);
+        
+        setTimeout(() => {
+          notification.classList.add('animate-slide-out');
+          setTimeout(() => notification.remove(), 300);
+        }, 2000);
+      } else {
+        // 显示错误提示
+        const notification = document.createElement('div');
+        notification.className = 'fixed top-4 right-4 bg-red-600 text-white px-4 py-2 rounded-lg shadow-lg z-50 animate-slide-in';
+        notification.textContent = result.message;
+        document.body.appendChild(notification);
+        
+        setTimeout(() => {
+          notification.classList.add('animate-slide-out');
+          setTimeout(() => notification.remove(), 300);
+        }, 2000);
+      }
+    } catch (error) {
+      console.error('保存歌词失败:', error);
+      const notification = document.createElement('div');
+      notification.className = 'fixed top-4 right-4 bg-red-600 text-white px-4 py-2 rounded-lg shadow-lg z-50 animate-slide-in';
+      notification.textContent = '保存歌词失败，请重试';
+      document.body.appendChild(notification);
+      
+      setTimeout(() => {
+        notification.classList.add('animate-slide-out');
+        setTimeout(() => notification.remove(), 300);
+      }, 2000);
+    }
   };
+  
+  // 处理搜索歌词 - 使用useCallback优化
+  const handleSearchLyrics = useCallback(async () => {
+    if (!song) return;
+    
+    try {
+      setSearchLoading(true);
+      setSearchResults([]);
+      setShowSearchModal(true);
+      
+      const artistName = song.artists[0]; // 使用真实的歌手名
+      const results = await searchLyricsByTitle(song.title, artistName, true); // 直接进行模糊搜索
+      setSearchResults(results);
+    } catch (error) {
+      console.error('搜索歌词失败:', error);
+      const notification = document.createElement('div');
+      notification.className = 'fixed top-4 right-4 bg-red-600 text-white px-4 py-2 rounded-lg shadow-lg z-50 animate-slide-in';
+      notification.textContent = '搜索歌词失败，请重试';
+      document.body.appendChild(notification);
+      
+      setTimeout(() => {
+        notification.classList.add('animate-slide-out');
+        setTimeout(() => notification.remove(), 300);
+      }, 2000);
+    } finally {
+      setSearchLoading(false);
+    }
+  }, [song]);
+  
+  // 处理选择歌词 - 使用useCallback优化
+  const handleSelectLyrics = useCallback(async (result: any) => {
+    if (!song) return;
+    
+    try {
+      setButtonLoading(true);
+      
+      // 直接使用搜索结果中的歌词数据
+      if (result && result.plainLyrics) {
+        // 将纯文本歌词按行分割
+        const lines = result.plainLyrics.split('\n')
+          .map((line: string) => convertToSimplified(line.trim()))
+          .filter((line: string) => line.length > 0);
+        
+        setLyrics(lines);
+        setShowSearchModal(false);
+        
+        // 保存到Supabase
+        const artistName = song.artists[0];
+        await saveLyricsToSupabase(song.id, song.title, artistName, lines.join('\n'), 'lrclib');
+        
+        // 显示成功提示
+        const notification = document.createElement('div');
+        notification.className = 'fixed top-4 right-4 bg-green-600 text-white px-4 py-2 rounded-lg shadow-lg z-50 animate-slide-in';
+        notification.textContent = '歌词获取成功';
+        document.body.appendChild(notification);
+        
+        setTimeout(() => {
+          notification.classList.add('animate-slide-out');
+          setTimeout(() => notification.remove(), 300);
+        }, 2000);
+      } else {
+        throw new Error('歌词数据格式错误');
+      }
+    } catch (error) {
+      console.error('获取歌词失败:', error);
+      const notification = document.createElement('div');
+      notification.className = 'fixed top-4 right-4 bg-red-600 text-white px-4 py-2 rounded-lg shadow-lg z-50 animate-slide-in';
+      notification.textContent = '获取歌词失败，请重试';
+      document.body.appendChild(notification);
+      
+      setTimeout(() => {
+        notification.classList.add('animate-slide-out');
+        setTimeout(() => notification.remove(), 300);
+      }, 2000);
+    } finally {
+      setButtonLoading(false);
+    }
+  }, [song]);
+
+  // 取消选中歌词
+  const handleClearSelection = useCallback(() => {
+    setSelectedLyrics([]);
+  }, []);
 
   if (!song) {
     return (
@@ -635,37 +771,23 @@ export const SongDetail: React.FC<SongDetailProps> = ({ songs, songId, onBack, o
               </svg>
               歌词
             </h2>
-            <button 
-              onClick={async () => {
-                if (song) {
-                  try {
-                    setButtonLoading(true);
-                    const lyricsData = await fetchLyrics(song.title, song.artists[0], 'qq');
-                    setLyrics(lyricsData);
-                  } catch (error) {
-                    console.error('Failed to fetch lyrics:', error);
-                  } finally {
-                    setButtonLoading(false);
-                  }
-                }
-              }}
-              disabled={buttonLoading}
-              className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-full transition-colors font-medium text-xs flex items-center gap-1"
-            >
-              {buttonLoading ? (
-                <>
-                  <div className="animate-spin h-3 w-3 border-2 border-white border-opacity-20 border-t-white rounded-full"></div>
-                  获取中...
-                </>
-              ) : (
-                <>
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                  </svg>
-                  获取歌词
-                </>
-              )}
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setShowLyricsEditor(true)}
+                className="px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white rounded-full transition-colors font-medium text-xs flex items-center gap-1"
+              >
+                <Pencil size={14} />
+                添加歌词
+              </button>
+              <button 
+                onClick={handleSearchLyrics}
+                disabled={buttonLoading}
+                className="px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white rounded-full transition-colors font-medium text-xs flex items-center gap-1"
+              >
+                <Search size={14} />
+                搜索歌词
+              </button>
+            </div>
           </div>
           
           {loading ? (
@@ -787,6 +909,65 @@ export const SongDetail: React.FC<SongDetailProps> = ({ songs, songId, onBack, o
           </div>
         )}
       </main>
+
+        {/* 搜索歌词模态框 */}
+        {showSearchModal && (
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 animate-fade-in">
+            <div className="bg-white rounded-xl p-6 max-w-md w-full mx-4 max-h-[80vh] overflow-auto animate-slide-up shadow-xl">
+              <div className="flex justify-between items-center mb-6">
+                <h3 className="text-xl font-semibold text-gray-900 flex items-center gap-2">
+                  <Search size={20} className="text-purple-500" />
+                  搜索歌词
+                </h3>
+                <button 
+                  onClick={() => setShowSearchModal(false)}
+                  className="text-gray-500 hover:text-gray-700 transition-colors p-2 rounded-full hover:bg-gray-100"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+              
+              <div className="mb-4">
+                <p className="text-sm text-gray-600 mb-2">
+                  搜索歌曲: <span className="font-medium">{song?.title}</span>
+                </p>
+              </div>
+              
+              {searchLoading ? (
+                <div className="flex flex-col justify-center items-center py-10 gap-4">
+                  <div className="animate-spin h-8 w-8 border-2 border-purple-500 border-opacity-20 border-t-purple-500 rounded-full"></div>
+                  <p className="text-gray-500 text-sm">正在搜索歌词...</p>
+                </div>
+              ) : searchResults.length > 0 ? (
+                <div className="space-y-3">
+                  {searchResults.map((result, index) => (
+                    <div 
+                      key={index} 
+                      className="p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors cursor-pointer border border-gray-200"
+                      onClick={() => handleSelectLyrics(result)}
+                    >
+                      <div className="font-medium text-gray-900 mb-1">{result.name || result.title}</div>
+                      <div className="text-sm text-gray-600 mb-2">{result.artistName || result.artist}</div>
+                      {result.albumName && (
+                        <div className="text-xs text-gray-500">{result.albumName}</div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="flex flex-col items-center justify-center text-center text-gray-500 py-10 gap-4">
+                  <div className="w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center mb-2">
+                    <Search size={24} className="text-gray-400" />
+                  </div>
+                  <h3 className="text-base font-medium text-gray-600">未找到歌词</h3>
+                  <p className="text-sm">尝试使用不同的歌曲标题或手动添加歌词</p>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* 分享海报模态框 */}
         {showShareModal && (
@@ -940,6 +1121,18 @@ export const SongDetail: React.FC<SongDetailProps> = ({ songs, songId, onBack, o
               </div>
             </div>
           </div>
+        )}
+        
+        {/* 歌词编辑器 */}
+        {song && (
+          <LyricsEditor
+            isOpen={showLyricsEditor}
+            onClose={() => setShowLyricsEditor(false)}
+            songTitle={song.title}
+            artistName={song.artists[0]}
+            onSave={handleSaveCustomLyrics}
+            existingLyrics={lyrics.join('\n')}
+          />
         )}
     </div>
   );

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Plus, Search, Music2, UploadCloud, Home, Users, Download, User, LogIn, LogOut } from 'lucide-react';
 import { Song, ViewState } from './types';
 import { SongCard } from './components/SongCard';
@@ -7,6 +7,7 @@ import ImportModal from './components/ImportModal';
 import { ArtistLibrary } from './components/ArtistLibrary';
 import { AlbumLibrary } from './components/AlbumLibrary';
 import { ArtistDetail } from './components/ArtistDetail';
+import { ArtistAlbums } from './components/ArtistAlbums';
 import { AlbumDetail } from './components/AlbumDetail';
 import { SongDetail } from './components/SongDetail';
 import MyPage from './components/MyPage';
@@ -201,79 +202,87 @@ const App: React.FC = () => {
     }
   };
 
-  // Filtered and Sorted Songs (Only for Home View)
+  // Filtered and Sorted Songs (Only for Home View) - 优化性能
   const filteredHomeSongs = useMemo(() => {
+    // 如果没有歌曲，直接返回空数组
+    if (songs.length === 0) return songs;
+
     let result = songs;
 
+    // 如果有搜索条件，进行过滤
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
       // 检查是否是年份搜索（4位数字）
       const isYearSearch = /^\d{4}$/.test(searchQuery);
+      const searchYear = isYearSearch ? Number(searchQuery) : null;
       
       result = result.filter(s => {
         // 年份搜索逻辑
-        if (isYearSearch) {
+        if (searchYear !== null) {
           if (s.releaseDate) {
             const songYear = typeof s.releaseDate === 'string' && !isNaN(Number(s.releaseDate)) 
               ? Number(s.releaseDate) 
               : new Date(s.releaseDate).getFullYear();
-            return songYear === Number(searchQuery);
+            return songYear === searchYear;
           }
           return false;
         }
         
-        // 常规搜索逻辑
-        return s.title.toLowerCase().includes(q) || 
-          s.artists.some(artist => artist.toLowerCase().includes(q)) ||
-          (s.album && s.album.toLowerCase().includes(q));
+        // 常规搜索逻辑 - 减少不必要的toLowerCase调用
+        const titleLower = s.title.toLowerCase();
+        if (titleLower.includes(q)) return true;
+        
+        for (const artist of s.artists) {
+          if (artist.toLowerCase().includes(q)) return true;
+        }
+        
+        if (s.album && s.album.toLowerCase().includes(q)) return true;
+        
+        return false;
       });
     }
 
-    // Sort based on selected configuration
+    // Sort based on selected configuration - 优化排序逻辑
+    const sortDirection = sortConfig.direction === 'asc' ? 1 : -1;
+    
     switch (sortConfig.key) {
       case 'title':
-        return result.sort((a, b) => {
-          const comparison = a.title.localeCompare(b.title);
-          return sortConfig.direction === 'asc' ? comparison : -comparison;
-        });
+        return result.slice().sort((a, b) => sortDirection * a.title.localeCompare(b.title));
       case 'releaseDate':
         // Sort by release date, with songs without date at the end
-        return result.sort((a, b) => {
+        return result.slice().sort((a, b) => {
           if (!a.releaseDate && !b.releaseDate) return 0;
-          if (!a.releaseDate) return sortConfig.direction === 'asc' ? 1 : -1;
-          if (!b.releaseDate) return sortConfig.direction === 'asc' ? -1 : 1;
-          
+          if (!a.releaseDate) return 1;
+          if (!b.releaseDate) return -1;
           const dateA = new Date(a.releaseDate).getTime();
           const dateB = new Date(b.releaseDate).getTime();
-          return sortConfig.direction === 'asc' ? dateA - dateB : dateB - dateA;
+          return sortDirection * (dateA - dateB);
         });
       case 'addedAt':
       default:
-        // Sort by added date with direction
-        return result.sort((a, b) => {
-          return sortConfig.direction === 'asc' ? a.addedAt - b.addedAt : b.addedAt - a.addedAt;
-        });
+        return result.slice().sort((a, b) => sortDirection * (a.addedAt - b.addedAt));
     }
   }, [songs, searchQuery, sortConfig]);
 
-  // Handlers
-  const handleDeleteSong = async (songId: string) => {
+  // Handlers - 使用useCallback优化，使用函数式更新避免依赖songs
+  const handleDeleteSong = useCallback(async (songId: string) => {
     // 确认删除
     if (window.confirm('确定要删除这首歌曲吗？')) {
       try {
         await deleteSong(songId);
-        // 更新本地状态
-        const updatedSongs = songs.filter(song => song.id !== songId);
-        setSongs(updatedSongs);
-        // 同步更新缓存
-        setCache('user_songs', updatedSongs);
+        // 使用函数式更新，避免依赖songs数组
+        setSongs(prevSongs => {
+          const updatedSongs = prevSongs.filter(song => song.id !== songId);
+          setCache('user_songs', updatedSongs);
+          return updatedSongs;
+        });
       } catch (error) {
         console.error('Failed to delete song:', error);
       }
     }
-  };
+  }, []);
 
-  const handleAddSong = async (title: string, artist: string, album: string, coverUrl?: string, releaseDate?: string) => {
+  const handleAddSong = useCallback(async (title: string, artist: string, album: string, coverUrl?: string, releaseDate?: string) => {
     // 将歌手字符串分割为数组，支持逗号、顿号、斜杠、& 符号分隔
     const artists = artist.split(/[,，、\/&]/).map(a => a.trim()).filter(a => a.length > 0);
     
@@ -351,61 +360,68 @@ const App: React.FC = () => {
     try {
       // Add to Supabase（现在会抛出错误而不是返回null）
       const addedSong = await addSong(newSong);
-      // 只有当歌曲成功添加到Supabase后，才更新本地状态
-      const updatedSongs = [addedSong, ...songs];
-      setSongs(updatedSongs);
-      // 同步更新缓存
-      setCache('user_songs', updatedSongs);
+      // 使用函数式更新，避免依赖songs数组
+      setSongs(prevSongs => {
+        const updatedSongs = [addedSong, ...prevSongs];
+        setCache('user_songs', updatedSongs);
+        return updatedSongs;
+      });
     } catch (error) {
       console.error('添加歌曲失败:', error);
       throw error;
     }
-  };
+  }, []);
 
-  const handleUpdateSong = async (updatedSong: Song) => {
+  const handleUpdateSong = useCallback(async (updatedSong: Song) => {
     try {
       // Update in Supabase
       await updateSong(updatedSong.id, updatedSong);
-      // Update local state and cache
-      const updatedSongs = songs.map(song => 
-        song.id === updatedSong.id ? updatedSong : song
-      );
-      setSongs(updatedSongs);
-      // 同步更新缓存
-      setCache('user_songs', updatedSongs);
+      // 使用函数式更新，避免依赖songs数组
+      setSongs(prevSongs => {
+        const updatedSongs = prevSongs.map(song => 
+          song.id === updatedSong.id ? updatedSong : song
+        );
+        setCache('user_songs', updatedSongs);
+        return updatedSongs;
+      });
     } catch (error) {
       console.error('Failed to update song:', error);
     }
-  };
+  }, []);
 
-  const handleUpdateAlbum = async (oldAlbumName: string, newAlbumName: string) => {
+  const handleUpdateAlbum = useCallback(async (oldAlbumName: string, newAlbumName: string) => {
     try {
-      // 获取所有属于该专辑的歌曲
-      const albumSongs = songs.filter(song => song.album === oldAlbumName);
-      
-      // 批量更新数据库
-      for (const song of albumSongs) {
-        const updatedSong = { ...song, album: newAlbumName };
-        await updateSong(song.id, updatedSong);
-      }
-      
-      // 更新本地状态和缓存
-      const updatedSongs = songs.map(song => 
-        song.album === oldAlbumName ? { ...song, album: newAlbumName } : song
-      );
-      setSongs(updatedSongs);
-      // 同步更新缓存
-      setCache('user_songs', updatedSongs);
-      
-      // 显示成功消息
-      alert(`成功将专辑 "${oldAlbumName}" 修改为 "${newAlbumName}"，共更新了 ${albumSongs.length} 首歌曲`);
+      // 使用函数式更新获取当前歌曲列表
+      setSongs(prevSongs => {
+        // 获取所有属于该专辑的歌曲
+        const albumSongs = prevSongs.filter(song => song.album === oldAlbumName);
+        
+        // 批量更新数据库
+        albumSongs.forEach(async (song) => {
+          const updatedSong = { ...song, album: newAlbumName };
+          await updateSong(song.id, updatedSong);
+        });
+        
+        // 更新本地状态和缓存
+        const updatedSongs = prevSongs.map(song => 
+          song.album === oldAlbumName ? { ...song, album: newAlbumName } : song
+        );
+        setCache('user_songs', updatedSongs);
+        
+        // 显示成功消息（在setSongs之外显示，避免在回调中调用alert）
+        setTimeout(() => {
+          alert(`成功将专辑 "${oldAlbumName}" 修改为 "${newAlbumName}"，共更新了 ${albumSongs.length} 首歌曲`);
+        }, 0);
+        
+        return updatedSongs;
+      });
     } catch (error) {
       console.error('Failed to update album:', error);
       alert('更新专辑名称失败，请稍后重试');
     }
-  };
+  }, []);
 
-  const handleBulkImport = async (lines: string[]) => {
+  const handleBulkImport = useCallback(async (lines: string[]) => {
     const newSongs: Song[] = [];
     const importErrors: string[] = [];
     
@@ -544,18 +560,18 @@ const App: React.FC = () => {
     } else {
       alert('没有成功导入任何歌曲，可能是因为所有歌曲都已存在或格式错误');
     }
-  };
+  }, [songs]);
 
-  // Navigation Handlers
-  const navigateTo = (newView: ViewState, scrollToTop = true) => {
+  // Navigation Handlers - 使用useCallback优化
+  const navigateTo = useCallback((newView: ViewState, scrollToTop = true) => {
     setNavigationHistory(prev => [...prev, newView]);
     setView(newView);
     if (scrollToTop) {
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }
-  };
+  }, []);
 
-  const navigateBack = () => {
+  const navigateBack = useCallback(() => {
     if (navigationHistory.length > 1) {
       // 移除当前页面，回到上一页
       const newHistory = navigationHistory.slice(0, -1);
@@ -573,36 +589,40 @@ const App: React.FC = () => {
       setView({ type: 'HOME' });
       setSearchQuery('');
     }
-  };
+  }, [navigationHistory]);
 
-  const navigateToHome = () => {
+  const navigateToHome = useCallback(() => {
     navigateTo({ type: 'HOME' });
     setSearchQuery('');
-  };
+  }, [navigateTo]);
 
-  const navigateToArtists = () => {
+  const navigateToArtists = useCallback(() => {
     navigateTo({ type: 'ARTISTS' });
-  };
+  }, [navigateTo]);
 
-  const navigateToAlbums = () => {
+  const navigateToAlbums = useCallback(() => {
     navigateTo({ type: 'ALBUMS' });
-  };
+  }, [navigateTo]);
 
-  const navigateToMyPage = () => {
+  const navigateToMyPage = useCallback(() => {
     navigateTo({ type: 'MY_PAGE' });
-  };
+  }, [navigateTo]);
 
-  const navigateToArtistDetail = (artist: string) => {
+  const navigateToArtistDetail = useCallback((artist: string) => {
     navigateTo({ type: 'ARTIST_DETAIL', data: artist });
-  };
+  }, [navigateTo]);
 
-  const navigateToAlbumDetail = (album: string) => {
+  const navigateToAlbumDetail = useCallback((album: string) => {
     navigateTo({ type: 'ALBUM_DETAIL', data: album });
-  };
+  }, [navigateTo]);
 
-  const navigateToSongDetail = (songId: string) => {
+  const navigateToArtistAlbums = useCallback((artist: string) => {
+    navigateTo({ type: 'ARTIST_ALBUMS', data: artist });
+  }, [navigateTo]);
+
+  const navigateToSongDetail = useCallback((songId: string) => {
     navigateTo({ type: 'SONG_DETAIL', data: songId });
-  };
+  }, [navigateTo]);
 
   // Random Roam Function
   const handleRandomRoam = () => {
@@ -907,6 +927,17 @@ const App: React.FC = () => {
                 onAlbumClick={navigateToAlbumDetail}
                 onDeleteSong={handleDeleteSong}
                 onSongClick={navigateToSongDetail}
+                onViewAllAlbums={navigateToArtistAlbums}
+            />
+        )}
+
+        {/* VIEW: ARTIST ALBUMS */}
+        {view.type === 'ARTIST_ALBUMS' && view.data && (
+            <ArtistAlbums 
+                artist={view.data} 
+                songs={songs} 
+                onBack={navigateBack}
+                onAlbumClick={navigateToAlbumDetail}
             />
         )}
 

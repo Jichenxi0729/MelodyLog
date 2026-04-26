@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { memo } from 'react';
 import { Song } from '../types';
 import { Calendar, Disc, User, Trash2 } from 'lucide-react';
 
@@ -18,7 +18,8 @@ interface SongCardProps {
   onYearSearch?: (year: number) => void;
 }
 
-export const SongCard: React.FC<SongCardProps> = ({ song, onArtistClick, onAlbumClick, onDelete, onSongClick, onYearSearch }) => {
+// 使用memo优化，防止不必要的重新渲染
+const SongCardComponent: React.FC<SongCardProps> = ({ song, onArtistClick, onAlbumClick, onDelete, onSongClick, onYearSearch }) => {
   // 更新添加时间格式，包含年份信息
   const formattedDate = new Date(song.addedAt).toLocaleDateString('zh-CN', {
     year: 'numeric',
@@ -132,3 +133,17 @@ export const SongCard: React.FC<SongCardProps> = ({ song, onArtistClick, onAlbum
     </div>
   );
 };
+
+// 使用memo包装组件，防止不必要的重新渲染
+export const SongCard = memo(SongCardComponent, (prevProps, nextProps) => {
+  // 自定义比较函数：只有当song对象的关键属性变化时才重新渲染
+  return (
+    prevProps.song.id === nextProps.song.id &&
+    prevProps.song.title === nextProps.song.title &&
+    prevProps.song.artists.join(',') === nextProps.song.artists.join(',') &&
+    prevProps.song.album === nextProps.song.album &&
+    prevProps.song.releaseDate === nextProps.song.releaseDate &&
+    prevProps.song.addedAt === nextProps.song.addedAt &&
+    prevProps.song.coverUrl === nextProps.song.coverUrl
+  );
+});

@@ -1,7 +1,7 @@
 import React, { useMemo } from 'react';
 import { Song } from '../types';
 import { SongCard } from './SongCard';
-import { ArrowLeft, User, Mic2 } from 'lucide-react';
+import { ArrowLeft, User, Mic2, Disc, ChevronRight, LayoutGrid, List } from 'lucide-react';
 
 interface ArtistDetailProps {
   artist: string;
@@ -10,14 +10,51 @@ interface ArtistDetailProps {
   onAlbumClick: (album: string) => void;
   onDeleteSong: (songId: string) => void;
   onSongClick?: (songId: string) => void;
+  onViewAllAlbums?: (artist: string) => void;
 }
 
-export const ArtistDetail: React.FC<ArtistDetailProps> = ({ artist, songs, onBack, onAlbumClick, onDeleteSong, onSongClick }) => {
+export const ArtistDetail: React.FC<ArtistDetailProps> = ({ artist, songs, onBack, onAlbumClick, onDeleteSong, onSongClick, onViewAllAlbums }) => {
   const artistSongs = useMemo(() => {
     return songs
       .filter(s => s.artists.includes(artist))
       .sort((a, b) => b.addedAt - a.addedAt);
   }, [songs, artist]);
+
+  const artistAlbums = useMemo(() => {
+    const albumMap = new Map<string, { coverUrl?: string; releaseDate?: string; songCount: number }>();
+    
+    artistSongs.forEach(song => {
+      if (song.album) {
+        const existing = albumMap.get(song.album);
+        if (existing) {
+          existing.songCount += 1;
+          if (!existing.coverUrl && song.coverUrl) {
+            existing.coverUrl = song.coverUrl;
+          }
+        } else {
+          albumMap.set(song.album, {
+            coverUrl: song.coverUrl,
+            releaseDate: song.releaseDate,
+            songCount: 1
+          });
+        }
+      }
+    });
+
+    return Array.from(albumMap.entries())
+      .map(([name, info]) => ({
+        name,
+        ...info
+      }))
+      .sort((a, b) => {
+        if (a.releaseDate && b.releaseDate) {
+          return new Date(b.releaseDate).getTime() - new Date(a.releaseDate).getTime();
+        }
+        if (a.releaseDate) return -1;
+        if (b.releaseDate) return 1;
+        return a.name.localeCompare(b.name, 'zh-CN');
+      });
+  }, [artistSongs]);
 
   return (
     <div className="animate-in slide-in-from-right-4 duration-300">
@@ -41,9 +78,70 @@ export const ArtistDetail: React.FC<ArtistDetailProps> = ({ artist, songs, onBac
           <h1 className="text-3xl md:text-4xl font-bold">{artist}</h1>
           <p className="mt-2 text-white/80 flex items-center gap-2">
             <span>{artistSongs.length} 首歌曲</span>
+            <span>·</span>
+            <span>{artistAlbums.length} 张专辑</span>
           </p>
         </div>
       </div>
+
+      {/* Albums Section - Horizontal Scroll */}
+      {artistAlbums.length > 0 && (
+        <div className="mb-8">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2">
+              <Disc className="text-brand-light" size={20} />
+              专辑 ({artistAlbums.length})
+            </h2>
+            {onViewAllAlbums && (
+              <button
+                onClick={() => onViewAllAlbums(artist)}
+                className="flex items-center gap-1 text-sm text-brand-light hover:text-brand-dark font-medium transition-colors"
+              >
+                查看全部
+                <ChevronRight size={16} />
+              </button>
+            )}
+          </div>
+          
+          <div className="relative">
+            <div className="flex gap-3 overflow-x-auto pb-4 scrollbar-hide scroll-smooth" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+              {artistAlbums.slice(0, 10).map((album) => (
+                <button
+                  key={album.name}
+                  onClick={() => onAlbumClick(album.name)}
+                  className="flex-shrink-0 w-32 group"
+                >
+                  <div className="relative w-32 h-32 rounded-lg overflow-hidden shadow-md transition-all group-hover:shadow-xl group-hover:scale-105">
+                    {album.coverUrl ? (
+                      <img 
+                        src={album.coverUrl} 
+                        alt={`${album.name} 专辑封面`}
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      <div className="w-full h-full bg-slate-100 flex items-center justify-center">
+                        <Disc size={32} className="text-slate-400" />
+                      </div>
+                    )}
+                  </div>
+                  <div className="mt-2 text-left">
+                    <p className="text-sm font-semibold text-slate-800 truncate group-hover:text-brand-light transition-colors">
+                      {album.name}
+                    </p>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      {album.songCount} 首
+                    </p>
+                  </div>
+                </button>
+              ))}
+            </div>
+            
+            {/* Gradient overlays for scroll indication */}
+            <div className="absolute left-0 top-0 bottom-4 w-8 bg-gradient-to-r from-white to-transparent pointer-events-none" />
+            <div className="absolute right-0 top-0 bottom-4 w-8 bg-gradient-to-l from-white to-transparent pointer-events-none" />
+          </div>
+        </div>
+      )}
 
       {/* Songs List */}
       <div className="space-y-3">
@@ -54,7 +152,6 @@ export const ArtistDetail: React.FC<ArtistDetailProps> = ({ artist, songs, onBac
             onAlbumClick={onAlbumClick}
             onDelete={() => onDeleteSong(song.id)}
             onSongClick={onSongClick}
-            // No artist click handler needed here as we are already on the artist page
           />
         ))}
       </div>
