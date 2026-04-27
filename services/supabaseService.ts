@@ -5,8 +5,29 @@ import { Song } from '../types';
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
 const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
 
-// 创建Supabase客户端实例
-export const supabase = createClient(supabaseUrl, supabaseKey);
+// 创建Supabase客户端实例，添加超时配置
+export const supabase = createClient(supabaseUrl, supabaseKey, {
+  auth: {
+    autoRefreshToken: true,
+    persistSession: true,
+    detectSessionInUrl: true,
+  },
+  global: {
+    fetch: async (url, options = {}) => {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 8000); // 8秒超时，减少等待时间
+      try {
+        const response = await fetch(url, { ...options, signal: controller.signal });
+        clearTimeout(timeoutId);
+        return response;
+      } catch (error) {
+        clearTimeout(timeoutId);
+        console.log('Supabase fetch timeout or error, will use cache');
+        throw error;
+      }
+    },
+  },
+});
 
 // 获取所有歌曲
 export async function getAllSongs(): Promise<Song[]> {
@@ -38,7 +59,8 @@ export async function getAllSongs(): Promise<Song[]> {
       // 确保返回的对象包含所有需要的字段
       coverUrl: song.coverUrl || '',
       releaseDate: song.releaseDate || '',
-      album: song.album || ''
+      album: song.album || '',
+      tags: song.tags || []
     }));
   } catch (error) {
     // 处理AuthSessionMissingError或其他错误
@@ -69,6 +91,7 @@ export async function addSong(song: Song): Promise<Song> {
         "coverUrl": song.coverUrl || '',
         "releaseDate": song.releaseDate || '',
         "addedAt": new Date(song.addedAt),
+        tags: song.tags || [],
       user_id: user.id // 添加用户ID关联
       }])
       .select()
@@ -89,7 +112,7 @@ export async function addSong(song: Song): Promise<Song> {
       coverUrl: data.coverUrl || '',
       releaseDate: data.releaseDate || '',
       album: data.album || '',
-  
+      tags: data.tags || []
     };
   } catch (error) {
     // 处理AuthSessionMissingError或其他错误
@@ -123,6 +146,7 @@ export async function addSongs(songs: Song[]): Promise<Song[]> {
       "coverUrl": song.coverUrl || '',
       "releaseDate": song.releaseDate || '',
       "addedAt": new Date(song.addedAt),
+      tags: song.tags || [],
       user_id: user.id // 添加用户ID关联
     }));
     
@@ -147,7 +171,8 @@ export async function addSongs(songs: Song[]): Promise<Song[]> {
       addedAt: new Date(song.addedAt).getTime(),
       coverUrl: song.coverUrl || '',
       releaseDate: song.releaseDate || '',
-      album: song.album || ''
+      album: song.album || '',
+      tags: song.tags || []
     }));
   } catch (error) {
     // 处理AuthSessionMissingError或其他错误
@@ -190,6 +215,9 @@ export async function updateSong(songId: string, updatedFields: Partial<Song>): 
     if (updatedFields.addedAt !== undefined) {
       updateData["addedAt"] = new Date(updatedFields.addedAt);
     }
+    if (updatedFields.tags !== undefined) {
+      updateData.tags = updatedFields.tags;
+    }
     
     const { data, error } = await supabase
       .from('songs')
@@ -213,7 +241,8 @@ export async function updateSong(songId: string, updatedFields: Partial<Song>): 
     addedAt: new Date(data.addedAt).getTime(),
     coverUrl: data.coverUrl || '',
     releaseDate: data.releaseDate || '',
-    album: data.album || ''
+    album: data.album || '',
+    tags: data.tags || []
   };
   } catch (error) {
     // 处理AuthSessionMissingError或其他错误

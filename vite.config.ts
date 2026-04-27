@@ -34,7 +34,35 @@ export default defineConfig(({ mode }) => {
             ]
           },
           workbox: {
-            globPatterns: ['**/*.{html,js,css,ico,png,svg}']
+            globPatterns: ['**/*.{html,js,css,ico,png,svg}'],
+            // 优化缓存策略
+            runtimeCaching: [
+              {
+                urlPattern: /^https:\/\/fonts\.(googleapis|gstatic)\.com\/.*/i,
+                handler: 'CacheFirst',
+                options: {
+                  cacheName: 'google-fonts',
+                  expiration: {
+                    maxEntries: 10,
+                    maxAgeSeconds: 60 * 60 * 24 * 365
+                  },
+                  cacheableResponse: {
+                    statuses: [0, 200]
+                  }
+                }
+              },
+              {
+                urlPattern: /\.(?:png|jpg|jpeg|svg|gif|webp)$/i,
+                handler: 'CacheFirst',
+                options: {
+                  cacheName: 'images',
+                  expiration: {
+                    maxEntries: 100,
+                    maxAgeSeconds: 60 * 60 * 24 * 30
+                  }
+                }
+              }
+            ]
           },
           devOptions: {
             enabled: true

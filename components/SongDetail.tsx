@@ -89,9 +89,10 @@ interface SongDetailProps {
   onArtistClick?: (artist: string) => void;
   onAlbumClick?: (album: string) => void;
   onUpdateSong?: (updatedSong: Song) => void;
+  onTagClick?: (tag: string) => void;
 }
 
-export const SongDetail: React.FC<SongDetailProps> = ({ songs, songId, onBack, onArtistClick, onAlbumClick, onUpdateSong }) => {
+export const SongDetail: React.FC<SongDetailProps> = ({ songs, songId, onBack, onArtistClick, onAlbumClick, onUpdateSong, onTagClick }) => {
   // 使用props传入的songId而不是从URL参数获取
   const navigate = useNavigate();
   // 状态管理
@@ -113,6 +114,8 @@ export const SongDetail: React.FC<SongDetailProps> = ({ songs, songId, onBack, o
   const [editedAlbum, setEditedAlbum] = useState('');
   const [editedCoverUrl, setEditedCoverUrl] = useState('');
   const [editedReleaseDate, setEditedReleaseDate] = useState('');
+  const [editedTags, setEditedTags] = useState<string[]>([]);
+  const [newTag, setNewTag] = useState('');
   
   // 歌词编辑器状态
   const [showLyricsEditor, setShowLyricsEditor] = useState(false);
@@ -144,6 +147,7 @@ export const SongDetail: React.FC<SongDetailProps> = ({ songs, songId, onBack, o
         setEditedAlbum(foundSong.album || '');
         setEditedCoverUrl(foundSong.coverUrl || '');
         setEditedReleaseDate(foundSong.releaseDate || '');
+        setEditedTags(foundSong.tags || []);
         
         // 加载歌词
         const loadLyrics = async () => {
@@ -169,8 +173,10 @@ export const SongDetail: React.FC<SongDetailProps> = ({ songs, songId, onBack, o
             // 兼容旧格式：如果是一维数组，转换为二维数组
             if (Array.isArray(parsed) && parsed.length > 0 && typeof parsed[0] === 'string') {
               setSavedLyrics([parsed]);
-            } else if (Array.isArray(parsed)) {
+              setShowSavedLyrics(true); // 有收藏歌词时自动显示
+            } else if (Array.isArray(parsed) && parsed.length > 0) {
               setSavedLyrics(parsed);
+              setShowSavedLyrics(true); // 有收藏歌词时自动显示
             }
           }
         } catch (error) {
@@ -202,6 +208,7 @@ export const SongDetail: React.FC<SongDetailProps> = ({ songs, songId, onBack, o
       setEditedAlbum(song.album || '');
       setEditedCoverUrl(song.coverUrl || '');
       setEditedReleaseDate(song.releaseDate || '');
+      setEditedTags(song.tags || []);
     }
   }, [song]);
 
@@ -213,13 +220,14 @@ export const SongDetail: React.FC<SongDetailProps> = ({ songs, songId, onBack, o
         artists: editedArtists,
         album: editedAlbum,
         coverUrl: editedCoverUrl,
-        releaseDate: editedReleaseDate
+        releaseDate: editedReleaseDate,
+        tags: editedTags
       };
       setSong(updatedSong);
       onUpdateSong(updatedSong);
       setIsEditing(false);
     }
-  }, [song, editedTitle, editedArtists, editedAlbum, editedCoverUrl, editedReleaseDate, onUpdateSong]);
+  }, [song, editedTitle, editedArtists, editedAlbum, editedCoverUrl, editedReleaseDate, editedTags, onUpdateSong]);
 
   const handleCancel = () => {
     setIsEditing(false);
@@ -229,7 +237,41 @@ export const SongDetail: React.FC<SongDetailProps> = ({ songs, songId, onBack, o
       setEditedAlbum(song.album || '');
       setEditedCoverUrl(song.coverUrl || '');
       setEditedReleaseDate(song.releaseDate || '');
+      setEditedTags(song.tags || []);
     }
+  };
+  
+  // 标签颜色数组 - 温暖柔和的纯色背景和文字颜色
+  interface TagColor {
+    bg: string;
+    text: string;
+  }
+  
+  const tagColors: TagColor[] = [
+    { bg: 'bg-pink-50', text: 'text-pink-600' },
+    { bg: 'bg-amber-50', text: 'text-amber-600' },
+    { bg: 'bg-lime-50', text: 'text-lime-600' },
+    { bg: 'bg-sky-50', text: 'text-sky-600' },
+    { bg: 'bg-violet-50', text: 'text-violet-600' },
+    { bg: 'bg-orange-50', text: 'text-orange-600' },
+  ];
+  
+  // 获取标签颜色
+  const getTagColor = (index: number) => {
+    return tagColors[index % tagColors.length];
+  };
+  
+  // 标签功能
+  const handleAddTag = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (newTag.trim() && !editedTags.includes(newTag.trim())) {
+      setEditedTags([...editedTags, newTag.trim()]);
+      setNewTag('');
+    }
+  };
+  
+  const handleRemoveTag = (tagToRemove: string) => {
+    setEditedTags(editedTags.filter(tag => tag !== tagToRemove));
   };
 
   // 处理艺术家变化
@@ -619,7 +661,44 @@ export const SongDetail: React.FC<SongDetailProps> = ({ songs, songId, onBack, o
                     className="text-xs text-gray-500 mb-1 w-full border-b border-gray-300 focus:border-blue-500 focus:outline-none pb-1"
                   />
                   
-                  <div className="flex gap-2 mt-2">
+                  {/* 标签编辑 */}
+                  <div className="mt-2">
+                    <div className="flex gap-2 flex-wrap mb-2">
+                      {editedTags.map((tag, index) => {
+                        const colors = getTagColor(index);
+                        const borderColor = colors.text.replace('text-', 'border-');
+                        return (
+                          <span key={index} className={`inline-flex items-center gap-1 px-2 py-1 ${colors.bg} ${colors.text} ${borderColor} border rounded-full text-xs`}>
+                            {tag}
+                            <button
+                              onClick={() => handleRemoveTag(tag)}
+                              className={`${colors.text} opacity-60 hover:opacity-100`}
+                            >
+                              ×
+                            </button>
+                          </span>
+                        );
+                      })}
+                    </div>
+                    <form onSubmit={handleAddTag} className="flex gap-2">
+                      <input
+                        type="text"
+                        value={newTag}
+                        onChange={(e) => setNewTag(e.target.value)}
+                        placeholder="添加记忆标签..."
+                        className="flex-1 text-xs px-2 py-1 bg-gray-100 border border-gray-200 rounded-full focus:border-amber-300 focus:outline-none"
+                      />
+                      <button
+                        type="submit"
+                        disabled={!newTag.trim()}
+                        className="px-3 py-1 bg-pink-500 text-white rounded-full text-xs hover:bg-pink-600 disabled:opacity-50"
+                      >
+                        添加
+                      </button>
+                    </form>
+                  </div>
+                  
+                  <div className="flex gap-2 mt-3">
                     <button
                       onClick={handleSave}
                       className="px-3 py-1 bg-blue-600 text-white rounded-full text-xs"
@@ -691,6 +770,27 @@ export const SongDetail: React.FC<SongDetailProps> = ({ songs, songId, onBack, o
                     );
                   })()}
                   
+                  {/* 标签显示 */}
+                  {song.tags && song.tags.length > 0 && (
+                    <div className="flex gap-2 flex-wrap mt-2">
+                      {song.tags.map((tag, index) => {
+                        const colors = getTagColor(index);
+                        const borderColor = colors.text.replace('text-', 'border-');
+                        return (
+                          <button
+                            key={index}
+                            onClick={() => onTagClick && onTagClick(tag)}
+                            className={`inline-flex items-center px-3 py-1 ${colors.bg} ${colors.text} ${borderColor} border rounded-full text-xs cursor-pointer hover:opacity-80 transition-opacity`}
+                          >
+                            <svg xmlns="http://www.w3.org/2000/svg" className={`w-3 h-3 mr-1 ${colors.text}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
+                            </svg>
+                            {tag}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
 
                 </div>
               )}
@@ -699,7 +799,7 @@ export const SongDetail: React.FC<SongDetailProps> = ({ songs, songId, onBack, o
         </section>
 
         {/* 收藏歌词区域 */}
-        <section className="bg-blue-50/20 rounded-xl p-3 shadow-md transform hover:shadow-lg transition-shadow duration-300 mb-4">
+        <section className="bg-blue-50/20 rounded-xl p-3 shadow-md mb-4">
           <div className="flex justify-between items-center mb-3">
             <h2 className="text-base font-semibold text-gray-800 flex items-center gap-2">
               <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-pink-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -757,7 +857,7 @@ export const SongDetail: React.FC<SongDetailProps> = ({ songs, songId, onBack, o
                 </svg>
               </div>
               <h3 className="text-sm font-medium text-gray-600">还没有保存喜欢的歌词</h3>
-              <p className="text-xs">选择歌词后点击"保存歌词"按钮，将喜欢的歌词收藏起来</p>
+              <p className="text-xs">选择歌词后点击"收藏"按钮，将喜欢的歌词收藏起来</p>
             </div>
           )}
         </section>
@@ -767,25 +867,39 @@ export const SongDetail: React.FC<SongDetailProps> = ({ songs, songId, onBack, o
           <div className="flex justify-between items-center mb-3">
             <h2 className="text-base font-semibold text-gray-800 flex items-center gap-2">
               <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2M9 19c0-1.105 1.343-2 3-2s3 .895 3-2s3 .895 3 2M9 19v-3m0 3V5m0 14c0 1.105-1.343 2-3 2s-3-.895-3-2m3 0c0-1.105 1.343-2 3-2s3 .895 3 2m0 0v-3m0 3" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2M9 19c0-1.105 1.343-2 3-2s3 .895 3 2M9 19v-3m0 3V5m0 14c0 1.105-1.343 2-3 2s-3-.895-3-2m3 0c0-1.105 1.343-2 3-2s3 .895 3 2m0 0v-3m0 3" />
               </svg>
               歌词
             </h2>
             <div className="flex items-center gap-2">
+              {selectedLyrics.length > 0 && (
+                <>
+                  <button
+                    onClick={handleClearSelection}
+                    className="px-3 py-1.5 bg-gray-500 hover:bg-gray-600 text-white rounded-full transition-colors font-medium text-xs flex items-center"
+                  >
+                    清除
+                  </button>
+                  <button
+                    onClick={handleSaveLyrics}
+                    className="px-3 py-1.5 bg-pink-600 hover:bg-pink-700 text-white rounded-full transition-colors font-medium text-xs flex items-center"
+                  >
+                    收藏
+                  </button>
+                </>
+              )}
               <button
                 onClick={() => setShowLyricsEditor(true)}
-                className="px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white rounded-full transition-colors font-medium text-xs flex items-center gap-1"
+                className="px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white rounded-full transition-colors font-medium text-xs flex items-center"
               >
                 <Pencil size={14} />
-                添加歌词
               </button>
               <button 
                 onClick={handleSearchLyrics}
                 disabled={buttonLoading}
-                className="px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white rounded-full transition-colors font-medium text-xs flex items-center gap-1"
+                className="px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white rounded-full transition-colors font-medium text-xs flex items-center"
               >
                 <Search size={14} />
-                搜索歌词
               </button>
             </div>
           </div>
@@ -796,71 +910,24 @@ export const SongDetail: React.FC<SongDetailProps> = ({ songs, songId, onBack, o
               <p className="text-gray-500 text-sm">正在获取歌词...</p>
             </div>
           ) : lyrics.length > 0 ? (
-            <div className="space-y-4 relative">
-              {/* 歌词提示 */}
-              <div className="absolute -top-10 left-0 right-0 text-center pointer-events-none">
-                <p className="text-xs text-blue-500 opacity-70">点击歌词可选择，长按可多选</p>
-              </div>
-              
+            <div className="space-y-4">
               {lyrics.map((line, index) => (
                   <p 
                     key={index} 
-                    className={`transition-all duration-300 cursor-pointer text-center py-2 px-4 text-sm ${selectedLyrics.includes(line) ? 'bg-blue-100 text-blue-700 rounded-xl transform scale-105 shadow-sm' : 'text-gray-700 hover:bg-gray-50 rounded-xl transform hover:scale-102'}`}
+                    className={`text-center py-2 px-4 text-sm cursor-pointer transition-all rounded-lg ${selectedLyrics.includes(line) ? 'bg-pink-100 text-pink-800' : 'text-gray-700 hover:bg-blue-50'}`}
                     onClick={() => {
-                      if (selectedLyrics.includes(line)) {
-                        setSelectedLyrics(selectedLyrics.filter(l => l !== line));
-                      } else {
-                        setSelectedLyrics([...selectedLyrics, line]);
-                      }
-                    }}
-                    onMouseDown={(e) => {
-                      // 长按效果 - 桌面版
-                      const timer = setTimeout(() => {
-                        if (!selectedLyrics.includes(line)) {
-                          setSelectedLyrics(prev => [...prev, line]);
-                          // 添加动画类
-                          const element = e.currentTarget;
-                          element.classList.add('animate-pulse');
-                          setTimeout(() => element.classList.remove('animate-pulse'), 300);
+                      setSelectedLyrics(prev => {
+                        if (prev.includes(line)) {
+                          return prev.filter(l => l !== line);
+                        } else {
+                          return [...prev, line];
                         }
-                      }, 500);
-                        
-                      const handleCancel = () => {
-                        clearTimeout(timer);
-                        document.removeEventListener('mouseup', handleCancel);
-                        document.removeEventListener('mouseleave', handleCancel);
-                      };
-                        
-                      document.addEventListener('mouseup', handleCancel);
-                      document.addEventListener('mouseleave', handleCancel);
-                    }}
-                    onTouchStart={(e) => {
-                      // 长按效果 - 移动版
-                      const timer = setTimeout(() => {
-                        if (!selectedLyrics.includes(line)) {
-                          setSelectedLyrics(prev => [...prev, line]);
-                          // 添加动画类
-                          const element = e.currentTarget;
-                          element.classList.add('animate-pulse');
-                          setTimeout(() => element.classList.remove('animate-pulse'), 300);
-                          // 阻止默认行为以避免触发点击事件
-                          e.preventDefault();
-                        }
-                      }, 500);
-                        
-                      const handleCancel = () => {
-                        clearTimeout(timer);
-                        document.removeEventListener('touchend', handleCancel);
-                        document.removeEventListener('touchmove', handleCancel);
-                      };
-                        
-                      document.addEventListener('touchend', handleCancel);
-                      document.addEventListener('touchmove', handleCancel);
+                      });
                     }}
                   >
                     {line}
                   </p>
-                ))}
+              ))}
             </div>
           ) : (
             <div className="flex flex-col items-center justify-center text-center text-gray-500 py-10 gap-4">
@@ -875,39 +942,7 @@ export const SongDetail: React.FC<SongDetailProps> = ({ songs, songId, onBack, o
           )}
         </section>
 
-        {/* 底部操作栏 */}
-        {selectedLyrics.length > 0 && (
-          <div className="fixed bottom-0 left-0 right-0 bg-white/90 backdrop-blur-md p-4 pb-20 flex flex-col justify-between items-center gap-4 z-55 animate-slide-up shadow-[0_-2px_10px_rgba(0,0,0,0.05)]">
-            <div className="flex items-center gap-2 w-full justify-center">
-              <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center">
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
-                </svg>
-              </div>
-              <span className="text-gray-700">已选择 {selectedLyrics.length} 句歌词</span>
-            </div>
-            <div className="flex gap-2 w-full">
-              <button 
-                onClick={handleClearSelection}
-                className="flex-1 px-4 py-3 text-sm rounded-full transition-all duration-300 font-medium bg-gray-200 hover:bg-gray-300 text-gray-800"
-              >
-                取消
-              </button>
-              <button 
-                onClick={handleSaveLyrics}
-                className="flex-1 px-4 py-3 text-sm rounded-full transition-all duration-300 font-medium bg-blue-600 hover:bg-blue-700 text-white"
-              >
-                保存歌词
-              </button>
-              <button 
-                onClick={handleShare}
-                className="flex-1 px-4 py-3 text-sm rounded-full transition-all duration-300 font-medium bg-green-600 hover:bg-green-700 text-white"
-              >
-                分享
-              </button>
-            </div>
-          </div>
-        )}
+
       </main>
 
         {/* 搜索歌词模态框 */}

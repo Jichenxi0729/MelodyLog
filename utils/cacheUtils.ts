@@ -7,8 +7,8 @@ interface CacheData<T> {
   expireAt: number;
 }
 
-// 默认缓存过期时间（1小时，单位：毫秒）
-const DEFAULT_CACHE_EXPIRY = 60 * 60 * 1000;
+// 默认缓存过期时间（7天，单位：毫秒）- 进一步延长缓存时间，降低网络依赖
+const DEFAULT_CACHE_EXPIRY = 7 * 24 * 60 * 60 * 1000;
 
 // 设置缓存
 export const setCache = <T>(key: string, data: T, expireAt: number = Date.now() + DEFAULT_CACHE_EXPIRY): void => {
@@ -25,7 +25,7 @@ export const setCache = <T>(key: string, data: T, expireAt: number = Date.now() 
 };
 
 // 获取缓存
-export const getCache = <T>(key: string): T | null => {
+export const getCache = <T>(key: string, allowExpired: boolean = true): T | null => {
   try {
     const cacheItem = localStorage.getItem(key);
     if (!cacheItem) return null;
@@ -35,9 +35,15 @@ export const getCache = <T>(key: string): T | null => {
 
     // 检查缓存是否过期
     if (now > cacheData.expireAt) {
-      // 缓存过期，删除它
-      localStorage.removeItem(key);
-      return null;
+      if (allowExpired) {
+        // 允许使用过期数据，但记录一下
+        console.log(`Using expired cache for ${key}`);
+        return cacheData.data;
+      } else {
+        // 不允许使用过期数据，删除它
+        localStorage.removeItem(key);
+        return null;
+      }
     }
 
     return cacheData.data;

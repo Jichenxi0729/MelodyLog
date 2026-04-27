@@ -5,7 +5,7 @@ import { musicApi, SongInfo } from '../services/musicApiAdapter';
 interface AddSongModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onAdd: (title: string, artist: string, album: string, coverUrl?: string, releaseDate?: string) => Promise<void>;
+  onAdd: (title: string, artist: string, album: string, coverUrl?: string, releaseDate?: string, tags?: string[]) => Promise<void>;
   songs: any[];
 }
 
@@ -15,6 +15,8 @@ export const AddSongModal: React.FC<AddSongModalProps> = ({ isOpen, onClose, onA
   const [album, setAlbum] = useState('');
   const [coverUrl, setCoverUrl] = useState('');
   const [releaseDate, setReleaseDate] = useState('');
+  const [tags, setTags] = useState<string[]>([]);
+  const [newTag, setNewTag] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [isDuplicate, setIsDuplicate] = useState(false);
   
@@ -35,6 +37,8 @@ export const AddSongModal: React.FC<AddSongModalProps> = ({ isOpen, onClose, onA
       setAlbum('');
       setCoverUrl('');
       setReleaseDate('');
+      setTags([]);
+      setNewTag('');
       setSearchKeyword('');
       setSearchResults([]);
       setSelectedSong(null);
@@ -244,7 +248,7 @@ export const AddSongModal: React.FC<AddSongModalProps> = ({ isOpen, onClose, onA
     }
     
     // 使用匹配到的信息或用户输入的信息
-    await onAdd(songTitle, songArtist, matchedAlbum, coverUrl, releaseDate);
+    await onAdd(songTitle, songArtist, matchedAlbum, coverUrl, releaseDate, tags.length > 0 ? tags : undefined);
     setIsLoading(false);
     
     // 重置状态
@@ -253,11 +257,27 @@ export const AddSongModal: React.FC<AddSongModalProps> = ({ isOpen, onClose, onA
     setAlbum('');
     setCoverUrl('');
     setReleaseDate('');
+    setTags([]);
+    setNewTag('');
     setSearchKeyword('');
     setSearchResults([]);
     setSelectedSong(null);
     setShowSearchResults(false);
     onClose();
+  };
+
+  // 添加标签
+  const handleAddTag = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (newTag.trim() && !tags.includes(newTag.trim())) {
+      setTags([...tags, newTag.trim()]);
+      setNewTag('');
+    }
+  };
+
+  // 删除标签
+  const handleRemoveTag = (tagToRemove: string) => {
+    setTags(tags.filter(tag => tag !== tagToRemove));
   };
 
   // 手动提交
@@ -543,6 +563,60 @@ export const AddSongModal: React.FC<AddSongModalProps> = ({ isOpen, onClose, onA
                         placeholder="输入发行日期，如2024-01-01（可选）"
                         className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-light focus:border-brand-light outline-none transition-all"
                       />
+                    </div>
+
+                    <div>
+                      <div className="flex items-center gap-2 mb-1">
+                        <svg width={16} height={16} className="text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
+                        </svg>
+                        <span className="text-sm text-slate-600">记忆标签</span>
+                      </div>
+                      {/* 显示已添加的标签 */}
+                      {tags.length > 0 && (
+                        <div className="flex gap-2 flex-wrap mb-2">
+                          {tags.map((tag, index) => {
+                            // 标签颜色逻辑（和SongDetail保持一致）
+                            const tagColorOptions = [
+                              { bg: 'bg-pink-50', text: 'text-pink-700', border: 'border-pink-200' },
+                              { bg: 'bg-amber-50', text: 'text-amber-700', border: 'border-amber-200' },
+                              { bg: 'bg-lime-50', text: 'text-lime-700', border: 'border-lime-200' },
+                              { bg: 'bg-sky-50', text: 'text-sky-700', border: 'border-sky-200' },
+                              { bg: 'bg-purple-50', text: 'text-purple-700', border: 'border-purple-200' },
+                              { bg: 'bg-orange-50', text: 'text-orange-700', border: 'border-orange-200' }
+                            ];
+                            const color = tagColorOptions[index % tagColorOptions.length];
+                            return (
+                              <span key={index} className={`inline-flex items-center gap-1 px-2 py-1 ${color.bg} ${color.text} ${color.border} border rounded-full text-xs`}>
+                                {tag}
+                                <button
+                                  onClick={() => handleRemoveTag(tag)}
+                                  className={`${color.text} opacity-60 hover:opacity-100`}
+                                >
+                                  ×
+                                </button>
+                              </span>
+                            );
+                          })}
+                        </div>
+                      )}
+                      {/* 添加标签的表单 */}
+                      <form onSubmit={handleAddTag} className="flex gap-2">
+                        <input
+                          type="text"
+                          value={newTag}
+                          onChange={(e) => setNewTag(e.target.value)}
+                          placeholder="添加记忆标签（可选）"
+                          className="flex-1 text-xs px-4 py-3 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-light focus:border-brand-light outline-none transition-all"
+                        />
+                        <button
+                          type="submit"
+                          disabled={!newTag.trim()}
+                          className="px-4 py-3 bg-pink-500 hover:bg-pink-600 text-white text-xs font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          添加
+                        </button>
+                      </form>
                     </div>
                   </div>
 

@@ -27,6 +27,7 @@ const App: React.FC = () => {
   // Data State
   const [songs, setSongs] = useState<Song[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
+  const [selectedTag, setSelectedTag] = useState<string | null>(null);
   
   // Navigation State
   const [view, setView] = useState<ViewState>({ type: 'HOME' });
@@ -53,6 +54,25 @@ const App: React.FC = () => {
 
   // Load current user and listen for auth state changes
   useEffect(() => {
+    // 优先尝试从缓存加载用户数据，提升首次加载速度
+    const cachedUser = localStorage.getItem('sb-session');
+    if (cachedUser) {
+      try {
+        const sessionData = JSON.parse(cachedUser);
+        if (sessionData?.session?.user) {
+          setUser(sessionData.session.user);
+          // 同时尝试从本地缓存加载歌曲
+          const cachedSongs = getCache<Song[]>('user_songs');
+          if (cachedSongs) {
+            setSongs(cachedSongs);
+            console.log('Quick load: User and songs from cache');
+          }
+        }
+      } catch (e) {
+        console.error('Failed to parse cached session');
+      }
+    }
+
     const loadUser = async () => {
       try {
         const { user } = await getCurrentUser();
@@ -75,36 +95,34 @@ const App: React.FC = () => {
         // User logged in, load their songs
         // 使用缓存优先策略
         const fetchSongs = async () => {
+          // 首先尝试从本地缓存获取歌曲 - 这一步是同步的，几乎立即完成
+          const cachedSongs = getCache<Song[]>('user_songs');
+          if (cachedSongs) {
+            // 如果缓存存在，立即使用缓存数据，提升用户体验
+            setSongs(cachedSongs);
+            console.log('Loaded songs from cache');
+          }
+          
+          // 然后异步从Supabase获取最新数据，但使用超时控制
           try {
-            // 首先尝试从本地缓存获取歌曲
-            const cachedSongs = getCache<Song[]>('user_songs');
-            if (cachedSongs) {
-              // 如果缓存存在，先使用缓存数据，提升用户体验
-              setSongs(cachedSongs);
-              console.log('Loaded songs from cache');
-            }
-            
-            // 然后从Supabase获取最新数据，更新缓存和状态
-            const songsFromSupabase = await getAllSongs();
+            const timeoutPromise = new Promise<never>((_, reject) => 
+              setTimeout(() => reject(new Error('Supabase request timeout')), 6000) // 6秒超时
+            );
+            const songsPromise = getAllSongs();
+            const songsFromSupabase = await Promise.race([songsPromise, timeoutPromise]) as Song[];
             setSongs(songsFromSupabase);
-            // 更新缓存，设置过期时间为1小时
+            // 更新缓存，设置过期时间为24小时
             setCache('user_songs', songsFromSupabase);
             console.log('Loaded songs from Supabase and updated cache');
           } catch (error) {
-            console.error('Failed to load songs after login:', error);
-            // 如果Supabase加载失败，尝试使用缓存
-            const cachedSongs = getCache<Song[]>('user_songs');
-            if (cachedSongs) {
-              setSongs(cachedSongs);
-              console.log('Fallback to cached songs due to Supabase error');
-            }
+            console.log('Failed to load songs from Supabase, sticking with cache:', error);
+            // 如果Supabase加载失败，保持缓存数据即可，不做任何处理
           }
         };
         fetchSongs();
       } else {
-        // User logged out, clear songs and cache
+        // User logged out, clear songs but keep cache for quick login later
         setSongs([]);
-        clearCache('user_songs');
       }
     });
 
@@ -209,6 +227,11 @@ const App: React.FC = () => {
 
     let result = songs;
 
+    // 如果有选中的标签，先进行标签过滤
+    if (selectedTag) {
+      result = result.filter(song => song.tags && song.tags.includes(selectedTag));
+    }
+
     // 如果有搜索条件，进行过滤
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
@@ -262,7 +285,7 @@ const App: React.FC = () => {
       default:
         return result.slice().sort((a, b) => sortDirection * (a.addedAt - b.addedAt));
     }
-  }, [songs, searchQuery, sortConfig]);
+  }, [songs, searchQuery, sortConfig, selectedTag]);
 
   // Handlers - 使用useCallback优化，使用函数式更新避免依赖songs
   const handleDeleteSong = useCallback(async (songId: string) => {
@@ -282,7 +305,7 @@ const App: React.FC = () => {
     }
   }, []);
 
-  const handleAddSong = useCallback(async (title: string, artist: string, album: string, coverUrl?: string, releaseDate?: string) => {
+  const handleAddSong = useCallback(async (title: string, artist: string, album: string, coverUrl?: string, releaseDate?: string, tags?: string[]) => {
     // 将歌手字符串分割为数组，支持逗号、顿号、斜杠、& 符号分隔
     const artists = artist.split(/[,，、\/&]/).map(a => a.trim()).filter(a => a.length > 0);
     
@@ -354,6 +377,7 @@ const App: React.FC = () => {
       album: matchedAlbum,
       coverUrl: matchedCoverUrl,
       releaseDate: matchedReleaseDate,
+      tags,
       addedAt: Date.now()
     };
 
@@ -624,6 +648,11 @@ const App: React.FC = () => {
     navigateTo({ type: 'SONG_DETAIL', data: songId });
   }, [navigateTo]);
 
+  const handleTagClick = useCallback((tag: string) => {
+    setSelectedTag(tag);
+    navigateToHome();
+  }, [navigateToHome]);
+
   // Random Roam Function
   const handleRandomRoam = () => {
     if (songs.length > 0) {
@@ -755,8 +784,23 @@ const App: React.FC = () => {
         {view.type === 'HOME' && (
           <div className="space-y-3 animate-in fade-in duration-300">
              <div className="flex items-center justify-between px-1">
-                <div className="flex items-center gap-1">
+                <div className="flex items-center gap-2">
                     <h2 className="text-base font-bold text-slate-800">最近添加</h2>
+                    {/* 显示当前筛选的标签 */}
+                    {selectedTag && (
+                      <div className="flex items-center gap-1 px-2 py-0.5 bg-amber-50 text-amber-700 border border-amber-200 rounded-full text-xs">
+                        <span>标签: {selectedTag}</span>
+                        <button
+                          onClick={() => setSelectedTag(null)}
+                          className="ml-1 text-amber-500 hover:text-amber-700"
+                        >
+                          <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <line x1="18" y1="6" x2="6" y2="18"></line>
+                            <line x1="6" y1="6" x2="18" y2="18"></line>
+                          </svg>
+                        </button>
+                      </div>
+                    )}
                     
                     {/* Sort Button with Dropdown */}
                     <div className="relative">
@@ -963,6 +1007,7 @@ const App: React.FC = () => {
                 onArtistClick={navigateToArtistDetail}
                 onAlbumClick={navigateToAlbumDetail}
                 onUpdateSong={handleUpdateSong}
+                onTagClick={handleTagClick}
             />
         )}
       </div>

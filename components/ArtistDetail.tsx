@@ -103,8 +103,8 @@ export const ArtistDetail: React.FC<ArtistDetailProps> = ({ artist, songs, onBac
             )}
           </div>
           
-          <div className="relative">
-            <div className="flex gap-3 overflow-x-auto pb-4 scrollbar-hide scroll-smooth" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+          <div>
+            <div className="flex gap-3 overflow-x-auto pb-4 scroll-smooth">
               {artistAlbums.slice(0, 10).map((album) => (
                 <button
                   key={album.name}
@@ -135,10 +135,6 @@ export const ArtistDetail: React.FC<ArtistDetailProps> = ({ artist, songs, onBac
                 </button>
               ))}
             </div>
-            
-            {/* Gradient overlays for scroll indication */}
-            <div className="absolute left-0 top-0 bottom-4 w-8 bg-gradient-to-r from-white to-transparent pointer-events-none" />
-            <div className="absolute right-0 top-0 bottom-4 w-8 bg-gradient-to-l from-white to-transparent pointer-events-none" />
           </div>
         </div>
       )}
