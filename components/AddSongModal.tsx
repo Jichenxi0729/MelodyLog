@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { X, Music, User, Disc, Loader2, Search, Check, ChevronDown, ChevronUp } from 'lucide-react';
+import { X, Music, User, Disc, Loader2, Search, Check, ChevronDown, ChevronUp, Tag } from 'lucide-react';
 import { musicApi, SongInfo } from '../services/musicApiAdapter';
+import { getTagsNameList, addTagToHistory, getNextColorIndex } from '../utils/tagUtils';
 
 interface AddSongModalProps {
   isOpen: boolean;
@@ -17,6 +18,7 @@ export const AddSongModal: React.FC<AddSongModalProps> = ({ isOpen, onClose, onA
   const [releaseDate, setReleaseDate] = useState('');
   const [tags, setTags] = useState<string[]>([]);
   const [newTag, setNewTag] = useState('');
+  const [showTagsHistory, setShowTagsHistory] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [isDuplicate, setIsDuplicate] = useState(false);
   
@@ -270,9 +272,22 @@ export const AddSongModal: React.FC<AddSongModalProps> = ({ isOpen, onClose, onA
   const handleAddTag = (e: React.FormEvent) => {
     e.preventDefault();
     if (newTag.trim() && !tags.includes(newTag.trim())) {
+      const colorIndex = getNextColorIndex();
+      addTagToHistory(newTag.trim(), colorIndex);
       setTags([...tags, newTag.trim()]);
       setNewTag('');
+      setShowTagsHistory(false);
     }
+  };
+
+  // 从匹配的标签中选择
+  const handleSelectFromMatchedTags = (tagName: string) => {
+    if (!tags.includes(tagName)) {
+      const colorIndex = tags.length % 6;
+      addTagToHistory(tagName, colorIndex);
+      setTags([...tags, tagName]);
+    }
+    setNewTag('');
   };
 
   // 删除标签
@@ -602,13 +617,52 @@ export const AddSongModal: React.FC<AddSongModalProps> = ({ isOpen, onClose, onA
                       )}
                       {/* 添加标签的表单 */}
                       <form onSubmit={handleAddTag} className="flex gap-2">
-                        <input
-                          type="text"
-                          value={newTag}
-                          onChange={(e) => setNewTag(e.target.value)}
-                          placeholder="添加记忆标签（可选）"
-                          className="flex-1 text-xs px-4 py-3 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-light focus:border-brand-light outline-none transition-all"
-                        />
+                        <div className="flex-1 relative">
+                          <input
+                            type="text"
+                            value={newTag}
+                            onChange={(e) => setNewTag(e.target.value)}
+                            onFocus={() => setShowTagsHistory(true)}
+                            placeholder="添加记忆标签（可选）"
+                            className="w-full text-xs px-4 py-3 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-light focus:border-brand-light outline-none transition-all"
+                          />
+                          {/* 智能匹配标签下拉列表 */}
+                          {showTagsHistory && getTagsNameList().length > 0 && (
+                            <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-lg shadow-lg z-10 max-h-40 overflow-y-auto">
+                              <div className="sticky top-0 bg-slate-50 px-3 py-2 border-b border-slate-100 flex items-center gap-2">
+                                <Tag className="w-3 h-3 text-slate-400" />
+                                <span className="text-xs text-slate-500">已有标签</span>
+                              </div>
+                              <div className="py-1">
+                                {getTagsNameList()
+                                  .filter(tagName => !tags.includes(tagName))
+                                  .filter(tagName => newTag === '' || tagName.includes(newTag))
+                                  .slice(0, 10)
+                                  .map((tagName, idx) => {
+                                    const tagColorOptions = [
+                                      { bg: 'bg-pink-50', text: 'text-pink-700' },
+                                      { bg: 'bg-amber-50', text: 'text-amber-700' },
+                                      { bg: 'bg-lime-50', text: 'text-lime-700' },
+                                      { bg: 'bg-sky-50', text: 'text-sky-700' },
+                                      { bg: 'bg-purple-50', text: 'text-purple-700' },
+                                      { bg: 'bg-orange-50', text: 'text-orange-700' }
+                                    ];
+                                    const color = tagColorOptions[idx % tagColorOptions.length];
+                                    return (
+                                      <button
+                                        key={tagName}
+                                        type="button"
+                                        onClick={() => handleSelectFromMatchedTags(tagName)}
+                                        className={`w-full text-left px-3 py-2 text-xs hover:bg-slate-50 ${color.text}`}
+                                      >
+                                        {tagName}
+                                      </button>
+                                    );
+                                  })}
+                              </div>
+                            </div>
+                          )}
+                        </div>
                         <button
                           type="submit"
                           disabled={!newTag.trim()}
@@ -617,6 +671,13 @@ export const AddSongModal: React.FC<AddSongModalProps> = ({ isOpen, onClose, onA
                           添加
                         </button>
                       </form>
+                      {/* 点击其他地方关闭历史标签列表 */}
+                      {showTagsHistory && (
+                        <div 
+                          className="fixed inset-0 z-0" 
+                          onClick={() => setShowTagsHistory(false)}
+                        />
+                      )}
                     </div>
                   </div>
 

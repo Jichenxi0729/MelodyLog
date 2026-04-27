@@ -3,8 +3,9 @@ import html2canvas from 'html2canvas';
 import { useNavigate } from 'react-router-dom';
 import { Song } from '../types';
 import { fetchLyrics, addCustomLyrics, searchLyricsByTitle, fetchLyricsById, saveLyricsToSupabase, convertToSimplified } from '../services/lyricsService';
-import { ArrowLeft, Share2, Plus, Pencil, Search } from 'lucide-react';
+import { ArrowLeft, Share2, Plus, Pencil, Search, Tag } from 'lucide-react';
 import { LyricsEditor } from './LyricsEditor';
+import { getTagsNameList, addTagToHistory } from '../utils/tagUtils';
 
 // 添加全局动画样式
 const styleSheet = document.createElement('style');
@@ -104,6 +105,8 @@ export const SongDetail: React.FC<SongDetailProps> = ({ songs, songId, onBack, o
   const [showShareModal, setShowShareModal] = useState(false);
   const [showSavedLyrics, setShowSavedLyrics] = useState(false);
   const [savedLyrics, setSavedLyrics] = useState<string[][]>([]); // 改为二维数组，每个子数组代表一组歌词
+  const [lyricsViewMode, setLyricsViewMode] = useState<'saved' | 'recommended'>('recommended'); // 歌词视图模式
+  const [recommendedLyrics, setRecommendedLyrics] = useState<string[][]>([]); // 推荐的歌词组
   const [isLongPressing, setIsLongPressing] = useState<Record<string, boolean>>({});
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
   
@@ -116,6 +119,7 @@ export const SongDetail: React.FC<SongDetailProps> = ({ songs, songId, onBack, o
   const [editedReleaseDate, setEditedReleaseDate] = useState('');
   const [editedTags, setEditedTags] = useState<string[]>([]);
   const [newTag, setNewTag] = useState('');
+  const [showTagsHistory, setShowTagsHistory] = useState(false);
   
   // 歌词编辑器状态
   const [showLyricsEditor, setShowLyricsEditor] = useState(false);
@@ -157,6 +161,9 @@ export const SongDetail: React.FC<SongDetailProps> = ({ songs, songId, onBack, o
             const artist = foundSong.artists[0];
             const lyricsData = await fetchLyrics(foundSong.id, foundSong.title, artist);
             setLyrics(lyricsData);
+            // 生成推荐歌词
+            const recommended = generateRecommendedLyrics(lyricsData);
+            setRecommendedLyrics(recommended);
           } catch (error) {
             console.error('Failed to load lyrics:', error);
           } finally {
@@ -212,7 +219,7 @@ export const SongDetail: React.FC<SongDetailProps> = ({ songs, songId, onBack, o
     }
   }, [song]);
 
-  const handleSave = useCallback(() => {
+  const handleSave = useCallback(async () => {
     if (song && onUpdateSong) {
       const updatedSong = {
         ...song,
@@ -226,6 +233,21 @@ export const SongDetail: React.FC<SongDetailProps> = ({ songs, songId, onBack, o
       setSong(updatedSong);
       onUpdateSong(updatedSong);
       setIsEditing(false);
+      
+      // 重新获取歌词，因为歌曲信息可能变化了
+      try {
+        setLoading(true);
+        const artist = updatedSong.artists[0];
+        const lyricsData = await fetchLyrics(updatedSong.id, updatedSong.title, artist);
+        setLyrics(lyricsData);
+        // 重新生成推荐歌词
+        const recommended = generateRecommendedLyrics(lyricsData);
+        setRecommendedLyrics(recommended);
+      } catch (error) {
+        console.error('Failed to load lyrics after update:', error);
+      } finally {
+        setLoading(false);
+      }
     }
   }, [song, editedTitle, editedArtists, editedAlbum, editedCoverUrl, editedReleaseDate, editedTags, onUpdateSong]);
 
@@ -265,13 +287,26 @@ export const SongDetail: React.FC<SongDetailProps> = ({ songs, songId, onBack, o
   const handleAddTag = (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     if (newTag.trim() && !editedTags.includes(newTag.trim())) {
+      const colorIndex = editedTags.length % 6;
+      addTagToHistory(newTag.trim(), colorIndex);
       setEditedTags([...editedTags, newTag.trim()]);
       setNewTag('');
+      setShowTagsHistory(false);
     }
   };
-  
+
   const handleRemoveTag = (tagToRemove: string) => {
     setEditedTags(editedTags.filter(tag => tag !== tagToRemove));
+  };
+
+  // 从匹配的标签中选择
+  const handleSelectFromMatchedTags = (tagName: string) => {
+    if (!editedTags.includes(tagName)) {
+      const colorIndex = editedTags.length % 6;
+      addTagToHistory(tagName, colorIndex);
+      setEditedTags([...editedTags, tagName]);
+    }
+    setNewTag('');
   };
 
   // 处理艺术家变化
@@ -416,6 +451,58 @@ export const SongDetail: React.FC<SongDetailProps> = ({ songs, songId, onBack, o
       notification.classList.add('animate-slide-out');
       setTimeout(() => notification.remove(), 300);
     }, 2000);
+  };
+
+  // 生成推荐歌词
+  const generateRecommendedLyrics = (fullLyrics: string[]) => {
+    // 过滤掉太短的歌词和纯标点符号
+    const validLyrics = fullLyrics.filter(lyric => {
+      const trimmed = lyric.trim();
+      return trimmed.length > 5 && !/^[\s\p{P}]+$/u.test(trimmed);
+    });
+
+    if (validLyrics.length === 0) {
+      return [];
+    }
+
+    const recommended: string[][] = [];
+    const maxGroups = 2; // 最多生成2组
+    const usedRanges = new Set<string>(); // 记录已使用的歌词范围，避免重复
+
+    for (let i = 0; i < maxGroups && recommended.length < maxGroups; i++) {
+      // 随机选择2-3句连续的歌词
+      const groupSize = Math.floor(Math.random() * 2) + 2; // 2-3句
+      
+      // 确保起始位置不会导致越界
+      const maxStartIndex = validLyrics.length - groupSize;
+      if (maxStartIndex < 0) break;
+
+      let startIndex;
+      let rangeKey;
+      let isRangeUsed;
+
+      // 尝试找到一个未使用的范围
+      do {
+        startIndex = Math.floor(Math.random() * (maxStartIndex + 1));
+        rangeKey = `${startIndex}-${startIndex + groupSize - 1}`;
+        isRangeUsed = usedRanges.has(rangeKey);
+      } while (isRangeUsed && usedRanges.size < validLyrics.length - groupSize + 1);
+
+      // 如果所有范围都被使用了，就退出循环
+      if (isRangeUsed) break;
+
+      // 标记这个范围为已使用
+      usedRanges.add(rangeKey);
+
+      // 提取连续的歌词组
+      const group = validLyrics.slice(startIndex, startIndex + groupSize).map(lyric => lyric.trim());
+
+      if (group.length >= 2) {
+        recommended.push(group);
+      }
+    }
+
+    return recommended;
   };
 
   // 处理保存自定义歌词
@@ -681,13 +768,52 @@ export const SongDetail: React.FC<SongDetailProps> = ({ songs, songId, onBack, o
                       })}
                     </div>
                     <form onSubmit={handleAddTag} className="flex gap-2">
-                      <input
-                        type="text"
-                        value={newTag}
-                        onChange={(e) => setNewTag(e.target.value)}
-                        placeholder="添加记忆标签..."
-                        className="flex-1 text-xs px-2 py-1 bg-gray-100 border border-gray-200 rounded-full focus:border-amber-300 focus:outline-none"
-                      />
+                      <div className="flex-1 relative">
+                        <input
+                          type="text"
+                          value={newTag}
+                          onChange={(e) => setNewTag(e.target.value)}
+                          onFocus={() => setShowTagsHistory(true)}
+                          placeholder="添加记忆标签..."
+                          className="w-full text-xs px-2 py-1 bg-gray-100 border border-gray-200 rounded-full focus:border-amber-300 focus:outline-none"
+                        />
+                        {/* 智能匹配标签下拉列表 */}
+                        {showTagsHistory && getTagsNameList().length > 0 && (
+                          <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-50 max-h-40 overflow-y-auto">
+                            <div className="sticky top-0 bg-gray-50 px-3 py-2 border-b border-gray-100 flex items-center gap-2">
+                              <Tag className="w-3 h-3 text-gray-400" />
+                              <span className="text-xs text-gray-500">已有标签</span>
+                            </div>
+                            <div className="py-1">
+                              {getTagsNameList()
+                                .filter(tagName => !editedTags.includes(tagName))
+                                .filter(tagName => newTag === '' || tagName.includes(newTag))
+                                .slice(0, 10)
+                                .map((tagName, idx) => {
+                                  const tagColorOptions = [
+                                    { bg: 'bg-pink-50', text: 'text-pink-700' },
+                                    { bg: 'bg-amber-50', text: 'text-amber-700' },
+                                    { bg: 'bg-lime-50', text: 'text-lime-700' },
+                                    { bg: 'bg-sky-50', text: 'text-sky-700' },
+                                    { bg: 'bg-purple-50', text: 'text-purple-700' },
+                                    { bg: 'bg-orange-50', text: 'text-orange-700' }
+                                  ];
+                                  const color = tagColorOptions[idx % tagColorOptions.length];
+                                  return (
+                                    <button
+                                      key={tagName}
+                                      type="button"
+                                      onClick={() => handleSelectFromMatchedTags(tagName)}
+                                      className={`w-full text-left px-3 py-2 text-xs hover:bg-gray-50 ${color.text}`}
+                                    >
+                                      {tagName}
+                                    </button>
+                                  );
+                                })}
+                            </div>
+                          </div>
+                        )}
+                      </div>
                       <button
                         type="submit"
                         disabled={!newTag.trim()}
@@ -696,6 +822,13 @@ export const SongDetail: React.FC<SongDetailProps> = ({ songs, songId, onBack, o
                         添加
                       </button>
                     </form>
+                    {/* 点击其他地方关闭历史标签列表 */}
+                    {showTagsHistory && (
+                      <div 
+                        className="fixed inset-0 z-0" 
+                        onClick={() => setShowTagsHistory(false)}
+                      />
+                    )}
                   </div>
                   
                   <div className="flex gap-2 mt-3">
@@ -798,33 +931,45 @@ export const SongDetail: React.FC<SongDetailProps> = ({ songs, songId, onBack, o
           </div>
         </section>
 
-        {/* 收藏歌词区域 */}
+        {/* 歌词区域 */}
         <section className="bg-blue-50/20 rounded-xl p-3 shadow-md mb-4">
           <div className="flex justify-between items-center mb-3">
             <h2 className="text-base font-semibold text-gray-800 flex items-center gap-2">
               <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-pink-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
               </svg>
-              我喜欢的歌词
+              {lyricsViewMode === 'saved' ? '我喜欢的歌词' : '推荐歌词'}
             </h2>
             <div className="flex items-center gap-4">
-              <span className="text-xs text-gray-500">{savedLyrics.length} 组</span>
-              <button 
-                onClick={() => setShowSavedLyrics(!showSavedLyrics)}
-                className="text-blue-600 hover:text-blue-700 text-xs"
-              >
-                {showSavedLyrics ? '隐藏' : '显示'}
-              </button>
+              {lyricsViewMode === 'saved' && (
+                <span className="text-xs text-gray-500">{savedLyrics.length} 组</span>
+              )}
+              <div className="flex gap-2">
+                <button 
+                  onClick={() => setLyricsViewMode('saved')}
+                  className={`text-xs px-3 py-1 rounded-full transition-colors ${lyricsViewMode === 'saved' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}
+                >
+                  我的
+                </button>
+                <button 
+                  onClick={() => setLyricsViewMode('recommended')}
+                  className={`text-xs px-3 py-1 rounded-full transition-colors ${lyricsViewMode === 'recommended' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}
+                >
+                  推荐
+                </button>
+              </div>
             </div>
           </div>
-          {savedLyrics.length > 0 ? (
-            showSavedLyrics && (
+          
+          {/* 我喜欢的歌词 */}
+          {lyricsViewMode === 'saved' && (
+            savedLyrics.length > 0 ? (
               <div className="space-y-4">
                 {/* 显示所有保存的歌词组 */}
                 <div className="space-y-4">
                   {savedLyrics.map((lyricGroup, groupIndex) => (
                     <div key={groupIndex} className="relative group">
-                      <p className="text-gray-700 bg-gray-50 p-3 rounded-xl transition-all duration-300 hover:shadow-md text-center italic text-xs">
+                      <p className="text-gray-700 bg-gray-50 p-3 rounded-xl transition-all duration-300 hover:shadow-md text-center text-sm">
                         「{lyricGroup.join('，')}。」
                       </p>
                       <button 
@@ -848,17 +993,57 @@ export const SongDetail: React.FC<SongDetailProps> = ({ songs, songId, onBack, o
                   )}
                 </div>
               </div>
-            )
-          ) : (
-            <div className="flex flex-col items-center justify-center text-center text-gray-500 py-10 gap-3">
-              <div className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center mb-2">
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
-                </svg>
+            ) : (
+              <div className="flex flex-col items-center justify-center text-center text-gray-500 py-10 gap-3">
+                <div className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center mb-2">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
+                  </svg>
+                </div>
+                <h3 className="text-sm font-medium text-gray-600">还没有保存喜欢的歌词</h3>
+                <p className="text-xs">选择歌词后点击"收藏"按钮，将喜欢的歌词收藏起来</p>
               </div>
-              <h3 className="text-sm font-medium text-gray-600">还没有保存喜欢的歌词</h3>
-              <p className="text-xs">选择歌词后点击"收藏"按钮，将喜欢的歌词收藏起来</p>
-            </div>
+            )
+          )}
+          
+          {/* 推荐歌词 */}
+          {lyricsViewMode === 'recommended' && (
+            <>
+              {recommendedLyrics.length > 0 ? (
+                <div className="space-y-4">
+                  <div className="space-y-4">
+                    {recommendedLyrics.map((lyricGroup, groupIndex) => (
+                      <div key={groupIndex} className="relative group">
+                        <p className="text-gray-700 bg-gray-50 p-3 rounded-xl transition-all duration-300 hover:shadow-md text-center text-sm">
+                          「{lyricGroup.join('，')}。」
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="text-center">
+                    <button 
+                      onClick={() => {
+                        const newRecommended = generateRecommendedLyrics(lyrics);
+                        setRecommendedLyrics(newRecommended);
+                      }}
+                      className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-full text-xs transition-colors"
+                    >
+                      重新推荐
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex flex-col items-center justify-center text-center text-gray-500 py-10 gap-3">
+                  <div className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center mb-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                    </svg>
+                  </div>
+                  <h3 className="text-sm font-medium text-gray-600">暂无推荐歌词</h3>
+                  <p className="text-xs">歌曲歌词太少，无法生成推荐</p>
+                </div>
+              )}
+            </>
           )}
         </section>
 

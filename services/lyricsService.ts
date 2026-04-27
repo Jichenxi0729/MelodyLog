@@ -397,16 +397,18 @@ export const fetchLyrics = async (
 ): Promise<string[]> => {
   const cacheKey = `${songId}_${songTitle.trim().toLowerCase()}_${artist || ''}`;
 
-  const cachedData = getLyricsFromCache(cacheKey, 'plain');
-  if (cachedData) {
-    return cachedData;
-  }
-
+  // 优先从Supabase获取歌词，确保使用最新数据
   const supabaseLyrics = await fetchLyricsFromSupabase(songId);
   if (supabaseLyrics && supabaseLyrics.plain_lyrics) {
     const lines = parsePlainText(supabaseLyrics.plain_lyrics);
     saveLyricsToCache(cacheKey, 'plain', lines);
     return lines;
+  }
+
+  // 如果Supabase没有歌词，再检查缓存
+  const cachedData = getLyricsFromCache(cacheKey, 'plain');
+  if (cachedData) {
+    return cachedData;
   }
 
   try {
