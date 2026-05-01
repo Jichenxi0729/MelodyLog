@@ -7,11 +7,18 @@ interface CacheData<T> {
   expireAt: number;
 }
 
-// 默认缓存过期时间（7天，单位：毫秒）- 进一步延长缓存时间，降低网络依赖
-const DEFAULT_CACHE_EXPIRY = 7 * 24 * 60 * 60 * 1000;
+// 缓存过期时间常量
+const CACHE_DURATION = {
+  /** 默认缓存过期时间：24小时 */
+  DEFAULT: 24 * 60 * 60 * 1000,
+  /** 用户歌曲数据缓存：24小时 */
+  USER_SONGS: 24 * 60 * 60 * 1000,
+} as const;
+
+export { CACHE_DURATION };
 
 // 设置缓存
-export const setCache = <T>(key: string, data: T, expireAt: number = Date.now() + DEFAULT_CACHE_EXPIRY): void => {
+export const setCache = <T>(key: string, data: T, expireAt: number = Date.now() + CACHE_DURATION.DEFAULT): void => {
   try {
     const cacheData: CacheData<T> = {
       data,

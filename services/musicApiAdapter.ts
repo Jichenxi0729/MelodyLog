@@ -1,6 +1,8 @@
 // 音乐API适配器 - 为React Web应用提供音乐API功能
 // 支持iTunes API
 
+import API_CONFIG from './apiConfig';
+
 // 默认API类型
 export const DEFAULT_API_TYPE = 'itunes-domestic' as const;
 
@@ -89,17 +91,24 @@ class MusicApiAdapter {
   private async searchWithItunes(params: { keyword: string; limit?: number }, country: string = 'CN'): Promise<SongInfo[]> {
     try {
       const response = await fetch(
-        `https://itunes.apple.com/search?term=${encodeURIComponent(params.keyword)}&entity=song&limit=${params.limit || 20}&country=${country}`
+        `${API_CONFIG.ITUNES_BASE_URL}?term=${encodeURIComponent(params.keyword)}&entity=song&limit=${params.limit || 20}&country=${country}`
       );
       
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
       
-      const data = await response.json();
+      const data: { results?: Array<{
+        trackId: number;
+        trackName: string;
+        artistName: string;
+        collectionName?: string;
+        artworkUrl100?: string;
+        releaseDate?: string;
+      }> } = await response.json();
       
       if (data.results && data.results.length > 0) {
-        return data.results.map((song: any) => ({
+        return data.results.map(song => ({
           id: song.trackId,
           name: song.trackName,
           artist: song.artistName,
@@ -224,27 +233,28 @@ class MusicApiAdapter {
       console.log(`TuneHub API搜索开始，类型: ${type}，关键词: ${params.keyword}`);
       
       // 使用TuneHub API的搜索接口
-      const response = await fetch(`https://music-dl.sayqz.com/api/?source=${type}&type=search&keyword=${encodeURIComponent(params.keyword)}&limit=${params.limit || 20}`);
+      const response = await fetch(`${API_CONFIG.TUNEHUB_BASE_URL}/?source=${type}&type=search&keyword=${encodeURIComponent(params.keyword)}&limit=${params.limit || 20}`);
       
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
       
-      const data = await response.json();
+      const data: { code?: number; data?: { results?: Array<{
+        id?: string | number;
+        songid?: string | number;
+        name?: string;
+        artist?: string;
+        album?: string;
+        pic?: string;
+      }> } } = await response.json();
       console.log(`TuneHub API原始响应数据:`, data);
       
       // 检查响应数据
-      let songs = [];
-      if (data.code === 200 && data.data && data.data.results) {
-        console.log(`找到歌曲列表在 data.data.results，数量: ${data.data.results.length}`);
-        songs = data.data.results;
-      } else {
-        console.log(`未找到歌曲列表，响应结构:`, Object.keys(data));
-        return [];
-      }
+      const songs = data.data?.results || [];
+      console.log(`找到歌曲列表，数量: ${songs.length}`);
       
       if (songs.length > 0) {
-        return songs.map((song: any) => {
+        return songs.map(song => {
           // 处理发行日期（TuneHub API可能不提供，留空）
           let releaseDate = '';
           

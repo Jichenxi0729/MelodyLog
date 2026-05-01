@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { Client } from 'lrclib-api';
 import * as OpenCC from 'opencc-js';
+import API_CONFIG from './apiConfig';
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
 const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
@@ -31,15 +32,20 @@ interface LyricsData {
 
 interface LyricsCache {
   [key: string]: {
-    data: any;
+    data: LyricsCacheData;
     timestamp: number;
   };
+}
+
+interface LyricsCacheData {
+  plain?: string[];
+  synced?: Array<{ time: string; text: string }>;
 }
 
 const memoryCache: LyricsCache = {};
 const CACHE_DURATION = 24 * 60 * 60 * 1000;
 
-const getLyricsFromCache = (key: string, type: 'plain' | 'synced'): any => {
+const getLyricsFromCache = (key: string, _type: 'plain' | 'synced'): string[] | Array<{ time: string; text: string }> | null => {
   if (memoryCache[key]) {
     const now = Date.now();
     if (now - memoryCache[key].timestamp < CACHE_DURATION) {
@@ -67,7 +73,7 @@ const getLyricsFromCache = (key: string, type: 'plain' | 'synced'): any => {
   return null;
 };
 
-const saveLyricsToCache = (key: string, type: 'plain' | 'synced', data: any): void => {
+const saveLyricsToCache = (key: string, _type: 'plain' | 'synced', data: string[] | Array<{ time: string; text: string }>): void => {
   const timestamp = Date.now();
   memoryCache[key] = { data, timestamp };
 
@@ -266,7 +272,17 @@ export const getAllUserLyrics = async (): Promise<LyricsData[]> => {
   }
 };
 
-export const searchLyricsByTitle = async (songTitle: string, artist?: string, directFuzzySearch = false): Promise<any[]> => {
+interface LrclibSearchResult {
+  id: number;
+  trackName: string;
+  artistName: string;
+  albumName: string;
+  instrumental: boolean;
+  plainLyrics: string | null;
+  syncedLyrics: string | null;
+}
+
+export const searchLyricsByTitle = async (songTitle: string, artist?: string, directFuzzySearch = false): Promise<LrclibSearchResult[]> => {
   try {
     // 转换为简体进行搜索
     const simplifiedTitle = convertToSimplified(songTitle);
@@ -274,12 +290,12 @@ export const searchLyricsByTitle = async (songTitle: string, artist?: string, di
     console.log(`[lrclib.net] 搜索歌词: ${simplifiedTitle}${simplifiedArtist ? ` - ${simplifiedArtist}` : ''}`);
     
     // 降级搜索策略
-    const searchWithParams = async (trackName: string, artistName?: string): Promise<any[]> => {
+    const searchWithParams = async (trackName: string, artistName?: string): Promise<LrclibSearchResult[]> => {
       const params = new URLSearchParams({ track_name: trackName });
       if (artistName) {
         params.append('artist_name', artistName);
       }
-      const url = `https://lrclib.net/api/search?${params.toString()}`;
+      const url = `${API_CONFIG.LRCLIB_SEARCH_URL}?${params.toString()}`;
       console.log(`[lrclib.net] 搜索URL: ${url}`);
       
       const response = await fetch(url);
@@ -418,7 +434,7 @@ export const fetchLyrics = async (
     console.log(`[lrclib.net] 获取歌词: ${simplifiedTitle}${simplifiedArtist ? ` - ${simplifiedArtist}` : ''}`);
 
     // 定义搜索函数（带错误处理）
-    const searchLyrics = async (useArtist: boolean): Promise<any> => {
+    const searchLyrics = async (useArtist: boolean): Promise<{ plainLyrics?: string; instrumental?: boolean } | null> => {
       try {
         const query = {
           track_name: simplifiedTitle,

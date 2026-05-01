@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Upload, X, AlertCircle, FileText, FileUp, CheckCircle2 } from 'lucide-react';
+import { useToast } from './Toast';
 
 interface SongImportInfo {
   title: string;
@@ -21,6 +22,7 @@ const ImportModal: React.FC<ImportModalProps> = ({ isOpen, onClose, onImport }) 
   const [isLoading, setIsLoading] = useState(false);
   const [status, setStatus] = useState<'idle' | 'success' | 'error'>('idle');
   const [activeTab, setActiveTab] = useState<'text' | 'csv'>('text');
+  const { showToast } = useToast();
 
   if (!isOpen) return null;
 
@@ -54,7 +56,7 @@ const ImportModal: React.FC<ImportModalProps> = ({ isOpen, onClose, onImport }) 
     } catch (error: any) {
       console.error('导入错误:', error);
       setStatus('error');
-      alert(`导入失败: ${error.message}`);
+      showToast(`导入失败: ${error.message}`, 'error');
       
       // 失败后自动关闭
       setTimeout(() => {
@@ -131,7 +133,7 @@ const ImportModal: React.FC<ImportModalProps> = ({ isOpen, onClose, onImport }) 
         // 显示导入结果
         const successCount = parsedLines.length;
         const totalLines = lines.length - 1;
-        alert(`成功导入 ${successCount} 首歌曲（共 ${totalLines} 行数据）`);
+        showToast(`成功导入 ${successCount} 首歌曲（共 ${totalLines} 行数据）`, 'success');
         
         // 成功后自动关闭
         setTimeout(() => {
@@ -140,7 +142,7 @@ const ImportModal: React.FC<ImportModalProps> = ({ isOpen, onClose, onImport }) 
           onClose();
         }, 1500);
       } else {
-        alert('CSV文件格式不正确或没有有效数据');
+        showToast('CSV文件格式不正确或没有有效数据', 'warning');
         
         // 无数据时也自动关闭
         setTimeout(() => {
@@ -151,7 +153,7 @@ const ImportModal: React.FC<ImportModalProps> = ({ isOpen, onClose, onImport }) 
       }
     } catch (error: any) {
       console.error('CSV导入错误:', error);
-      alert(`导入失败: ${error.message}`);
+      showToast(`导入失败: ${error.message}`, 'error');
       
       // 失败后自动关闭
       setTimeout(() => {

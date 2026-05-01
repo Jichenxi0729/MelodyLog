@@ -3,6 +3,7 @@ import html2canvas from 'html2canvas';
 import { useNavigate } from 'react-router-dom';
 import { Song } from '../types';
 import { fetchLyrics, addCustomLyrics, searchLyricsByTitle, fetchLyricsById, saveLyricsToSupabase, convertToSimplified } from '../services/lyricsService';
+import { useToast } from './Toast';
 import { ArrowLeft, Share2, Plus, Pencil, Search, Tag } from 'lucide-react';
 import { LyricsEditor } from './LyricsEditor';
 import { getTagsFromSongs, addTagToHistory } from '../utils/tagUtils';
@@ -96,6 +97,7 @@ interface SongDetailProps {
 export const SongDetail: React.FC<SongDetailProps> = ({ songs, songId, onBack, onArtistClick, onAlbumClick, onUpdateSong, onTagClick }) => {
   // 使用props传入的songId而不是从URL参数获取
   const navigate = useNavigate();
+  const { showToast } = useToast();
   // 状态管理
   const [song, setSong] = useState<Song | null>(null);
   const [lyrics, setLyrics] = useState<string[]>([]);
@@ -180,16 +182,18 @@ export const SongDetail: React.FC<SongDetailProps> = ({ songs, songId, onBack, o
             // 兼容旧格式：如果是一维数组，转换为二维数组
             if (Array.isArray(parsed) && parsed.length > 0 && typeof parsed[0] === 'string') {
               setSavedLyrics([parsed]);
-              setShowSavedLyrics(true); // 有收藏歌词时自动显示
+              setShowSavedLyrics(true);
             } else if (Array.isArray(parsed) && parsed.length > 0) {
               setSavedLyrics(parsed);
-              setShowSavedLyrics(true); // 有收藏歌词时自动显示
+              setShowSavedLyrics(true);
             }
           }
         } catch (error) {
           console.error('解析保存的歌词失败:', error);
           localStorage.removeItem(`savedLyrics_${songId}`);
         }
+      } else {
+        setLoading(false);
       }
     }
   }, [songId]);
@@ -366,15 +370,15 @@ export const SongDetail: React.FC<SongDetailProps> = ({ songs, songId, onBack, o
           document.body.removeChild(downloadLink);
         } catch (error) {
           console.error('下载海报失败:', error);
-          alert('下载海报时发生错误，请稍后再试。');
+          showToast('下载海报时发生错误，请稍后再试。', 'error');
         }
       }).catch(error => {
         console.error('生成海报图片失败:', error);
-        alert('生成海报图片时发生错误，请稍后再试。');
+        showToast('生成海报图片时发生错误，请稍后再试。', 'error');
       });
     } else {
       console.error('未找到海报元素');
-      alert('无法找到海报元素，请稍后再试。');
+      showToast('无法找到海报元素，请稍后再试。', 'error');
     }
     
     // 关闭模态框
@@ -648,6 +652,13 @@ export const SongDetail: React.FC<SongDetailProps> = ({ songs, songId, onBack, o
   }, []);
 
   if (!song) {
+    if (loading) {
+      return (
+        <div className="flex items-center justify-center h-screen bg-brand-bg">
+          <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-blue-500"></div>
+        </div>
+      );
+    }
     return (
       <div className="flex items-center justify-center h-screen bg-brand-bg text-gray-800">
         <div className="text-center">
@@ -1314,16 +1325,16 @@ export const SongDetail: React.FC<SongDetailProps> = ({ songs, songId, onBack, o
                             }).catch(err => {
                               console.error('Web Share API分享失败:', err);
                               // 不自动回退到下载，让用户自己选择
-                              alert('分享失败，请尝试下载海报或复制链接。');
+                              showToast('分享失败，请尝试下载海报或复制链接。', 'warning');
                             });
                           } else {
                             console.log('浏览器不支持Web Share API');
                             // 如果浏览器不支持分享API，提示用户
-                            alert('您的浏览器不支持直接分享功能，请尝试下载海报或复制链接。');
+                            showToast('您的浏览器不支持直接分享功能，请尝试下载海报或复制链接。', 'info');
                           }
                         } catch (err) {
                           console.error('分享功能执行错误:', err);
-                          alert('分享时发生错误，请稍后再试。');
+                          showToast('分享时发生错误，请稍后再试。', 'error');
                         }
                       }}
                       className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors flex items-center justify-center gap-2 cursor-pointer"
