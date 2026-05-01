@@ -41,6 +41,10 @@ export const useNavigation = () => {
     navigateTo({ type: 'ALBUMS' });
   }, [navigateTo]);
 
+  const navigateToTags = useCallback(() => {
+    navigateTo({ type: 'TAGS' });
+  }, [navigateTo]);
+
   const navigateToMyPage = useCallback(() => {
     navigateTo({ type: 'MY_PAGE' });
   }, [navigateTo]);
@@ -69,6 +73,7 @@ export const useNavigation = () => {
     navigateToHome,
     navigateToArtists,
     navigateToAlbums,
+    navigateToTags,
     navigateToMyPage,
     navigateToArtistDetail,
     navigateToAlbumDetail,

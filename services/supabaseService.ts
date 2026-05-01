@@ -60,7 +60,9 @@ export async function getAllSongs(): Promise<Song[]> {
       coverUrl: song.coverUrl || '',
       releaseDate: song.releaseDate || '',
       album: song.album || '',
-      tags: song.tags || []
+      tags: song.tags || [],
+      // 映射数据库字段 user_lyrics → lyrics
+      lyrics: song.user_lyrics || song.lyrics || undefined,
     }));
   } catch (error) {
     // 处理AuthSessionMissingError或其他错误

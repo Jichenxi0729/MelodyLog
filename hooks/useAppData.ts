@@ -369,6 +369,56 @@ export const useAppData = () => {
     }
   }, [songs, showToast]);
 
+  const handleJSONImport = useCallback(async (importedSongs: Song[]) => {
+    const newSongs: Song[] = [];
+    const existingKeys = new Set<string>();
+    songs.forEach(song => {
+      existingKeys.add(`${song.title.toLowerCase()}|||${song.artists.join(',').toLowerCase()}`);
+    });
+    
+    for (const song of importedSongs) {
+      const artists = typeof song.artists === 'string' 
+        ? (song.artists as unknown as string).split(/[,，、\/]/).map((a: string) => a.trim()).filter((a: string) => a.length > 0)
+        : song.artists;
+      
+      const songKey = `${song.title.toLowerCase()}|||${artists.join(',').toLowerCase()}`;
+      if (existingKeys.has(songKey)) continue;
+      
+      newSongs.push({
+        id: song.id || crypto.randomUUID(),
+        title: song.title,
+        artists,
+        album: song.album || undefined,
+        coverUrl: song.coverUrl || undefined,
+        releaseDate: song.releaseDate || undefined,
+        tags: song.tags || [],
+        lyrics: song.lyrics || undefined,
+        comment: song.comment || undefined,
+        duration: song.duration || undefined,
+        addedAt: song.addedAt || Date.now(),
+      });
+      existingKeys.add(songKey);
+    }
+    
+    if (newSongs.length > 0) {
+      try {
+        const addedSongs = await addSongs(newSongs);
+        const updatedSongs = [...addedSongs, ...songs];
+        setSongs(updatedSongs);
+        setCache('user_songs', updatedSongs);
+        
+        const skipped = importedSongs.length - newSongs.length;
+        const msg = `成功导入 ${addedSongs.length} 首歌曲`;
+        showToast(skipped > 0 ? `${msg}，${skipped} 首已跳过（重复）` : msg, skipped > 0 ? 'warning' : 'success');
+      } catch (error) {
+        console.error('JSON import failed:', error);
+        showToast('导入失败，请重试', 'error');
+      }
+    } else {
+      showToast('所有歌曲已存在，没有新歌曲导入', 'warning');
+    }
+  }, [songs, showToast]);
+
   const handleSignOut = useCallback(async () => {
     try {
       await signOut();
@@ -387,6 +437,7 @@ export const useAppData = () => {
     handleUpdateSong,
     handleUpdateAlbum,
     handleBulkImport,
+    handleJSONImport,
     handleSignOut,
   };
 };

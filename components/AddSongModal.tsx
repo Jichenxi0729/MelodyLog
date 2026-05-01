@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { X, Music, User, Disc, Loader2, Search, Check, ChevronDown, ChevronUp, Tag } from 'lucide-react';
 import { musicApi, SongInfo } from '../services/musicApiAdapter';
 import { getTagsFromSongs, addTagToHistory, getNextColorIndex } from '../utils/tagUtils';
@@ -19,6 +19,8 @@ export const AddSongModal: React.FC<AddSongModalProps> = ({ isOpen, onClose, onA
   const [tags, setTags] = useState<string[]>([]);
   const [newTag, setNewTag] = useState('');
   const [showTagsHistory, setShowTagsHistory] = useState(false);
+  const [tagDropdownPos, setTagDropdownPos] = useState<{top: number; left: number; width: number} | null>(null);
+  const tagInputRef = useRef<HTMLDivElement>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isDuplicate, setIsDuplicate] = useState(false);
   
@@ -277,6 +279,7 @@ export const AddSongModal: React.FC<AddSongModalProps> = ({ isOpen, onClose, onA
       setTags([...tags, newTag.trim()]);
       setNewTag('');
       setShowTagsHistory(false);
+      setTagDropdownPos(null);
     }
   };
 
@@ -289,6 +292,7 @@ export const AddSongModal: React.FC<AddSongModalProps> = ({ isOpen, onClose, onA
     }
     setNewTag('');
     setShowTagsHistory(false);
+    setTagDropdownPos(null);
   };
 
   // 删除标签
@@ -618,52 +622,69 @@ export const AddSongModal: React.FC<AddSongModalProps> = ({ isOpen, onClose, onA
                       )}
                       {/* 添加标签的表单 - 移除了 form 标签避免嵌套问题 */}
                       <div className="flex gap-2">
-                        <div className="flex-1 relative">
+                        <div className="flex-1 relative" ref={tagInputRef}>
                           <input
                             type="text"
                             value={newTag}
                             onChange={(e) => setNewTag(e.target.value)}
-                            onFocus={() => setShowTagsHistory(true)}
+                            onFocus={() => {
+                              setShowTagsHistory(true);
+                              if (tagInputRef.current) {
+                                const rect = tagInputRef.current.getBoundingClientRect();
+                                setTagDropdownPos({
+                                  top: rect.top,
+                                  left: rect.left,
+                                  width: rect.width,
+                                });
+                              }
+                            }}
                             onKeyPress={(e) => e.key === 'Enter' && handleAddTag(e as any)}
                             placeholder="添加记忆标签（可选）"
                             className="w-full text-xs px-4 py-3 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-light focus:border-brand-light outline-none transition-all"
                           />
-                          {/* 智能匹配标签下拉列表 */}
-                          {showTagsHistory && getTagsFromSongs(songs).length > 0 && (
-                            <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-lg shadow-xl z-50 max-h-40 overflow-y-auto">
-                              <div className="sticky top-0 bg-slate-50 px-3 py-2 border-b border-slate-100 flex items-center gap-2">
-                                <Tag className="w-3 h-3 text-slate-400" />
-                                <span className="text-xs text-slate-500">已有标签</span>
+                          {/* 智能匹配标签下拉列表 - 使用fixed定位避免被overflow裁剪 */}
+                          {showTagsHistory && getTagsFromSongs(songs).length > 0 && tagDropdownPos && (
+                            <div 
+                              className="fixed bg-white border border-slate-200 rounded-lg shadow-xl z-[100] max-h-40 overflow-y-auto"
+                              style={{
+                                left: tagDropdownPos.left,
+                                top: tagDropdownPos.top - 160,
+                                width: tagDropdownPos.width,
+                              }}
+                            >
+                                <div className="sticky top-0 bg-slate-50 px-3 py-2 border-b border-slate-100 flex items-center gap-2">
+                                  <Tag className="w-3 h-3 text-slate-400" />
+                                  <span className="text-xs text-slate-500">已有标签</span>
+                                </div>
+                                <div className="py-1">
+                                  {getTagsFromSongs(songs)
+                                    .filter(tagName => !tags.includes(tagName))
+                                    .filter(tagName => newTag === '' || tagName.toLowerCase().includes(newTag.toLowerCase()))
+                                    .slice(0, 10)
+                                    .map((tagName, idx) => {
+                                      const tagColorOptions = [
+                                        { bg: 'bg-pink-50', text: 'text-pink-700' },
+                                        { bg: 'bg-amber-50', text: 'text-amber-700' },
+                                        { bg: 'bg-lime-50', text: 'text-lime-700' },
+                                        { bg: 'bg-sky-50', text: 'text-sky-700' },
+                                        { bg: 'bg-purple-50', text: 'text-purple-700' },
+                                        { bg: 'bg-orange-50', text: 'text-orange-700' }
+                                      ];
+                                      const color = tagColorOptions[idx % tagColorOptions.length];
+                                      return (
+                                        <button
+                                          key={tagName}
+                                          type="button"
+                                          onClick={() => handleSelectFromMatchedTags(tagName)}
+                                          className={`w-full text-left px-3 py-2 text-xs hover:bg-slate-50 ${color.text}`}
+                                        >
+                                          {tagName}
+                                        </button>
+                                      );
+                                    })}
+                                </div>
                               </div>
-                              <div className="py-1">
-                                {getTagsFromSongs(songs)
-                                  .filter(tagName => !tags.includes(tagName))
-                                  .filter(tagName => newTag === '' || tagName.toLowerCase().includes(newTag.toLowerCase()))
-                                  .slice(0, 10)
-                                  .map((tagName, idx) => {
-                                    const tagColorOptions = [
-                                      { bg: 'bg-pink-50', text: 'text-pink-700' },
-                                      { bg: 'bg-amber-50', text: 'text-amber-700' },
-                                      { bg: 'bg-lime-50', text: 'text-lime-700' },
-                                      { bg: 'bg-sky-50', text: 'text-sky-700' },
-                                      { bg: 'bg-purple-50', text: 'text-purple-700' },
-                                      { bg: 'bg-orange-50', text: 'text-orange-700' }
-                                    ];
-                                    const color = tagColorOptions[idx % tagColorOptions.length];
-                                    return (
-                                      <button
-                                        key={tagName}
-                                        type="button"
-                                        onClick={() => handleSelectFromMatchedTags(tagName)}
-                                        className={`w-full text-left px-3 py-2 text-xs hover:bg-slate-50 ${color.text}`}
-                                      >
-                                        {tagName}
-                                      </button>
-                                    );
-                                  })}
-                              </div>
-                            </div>
-                          )}
+                            )}
                         </div>
                         <button
                           type="button"
@@ -677,8 +698,8 @@ export const AddSongModal: React.FC<AddSongModalProps> = ({ isOpen, onClose, onA
                       {/* 点击其他地方关闭历史标签列表 */}
                       {showTagsHistory && (
                         <div 
-                          className="fixed inset-0 z-0" 
-                          onClick={() => setShowTagsHistory(false)}
+                          className="fixed inset-0 z-[99]" 
+                          onClick={() => { setShowTagsHistory(false); setTagDropdownPos(null); }}
                         />
                       )}
                     </div>

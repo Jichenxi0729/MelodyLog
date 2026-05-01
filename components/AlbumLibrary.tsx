@@ -1,25 +1,42 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import { Song } from '../types';
-import { Music, ChevronRight, LayoutGrid, List, Calendar } from 'lucide-react';
+import { Music, ChevronRight, LayoutGrid, List, Calendar, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
 
 type AlbumViewMode = 'three-col' | 'two-col' | 'list';
+type AlbumSortKey = 'year' | 'name';
+type AlbumSortDirection = 'asc' | 'desc';
 
 const STORAGE_KEY_ALBUM_LIBRARY_VIEW = 'melodylog_album_library_view_mode';
+const STORAGE_KEY_ALBUM_SORT = 'melodylog_album_library_sort';
 
 interface AlbumLibraryProps {
   songs: Song[];
   onSelectAlbum: (album: string) => void;
 }
 
-export const AlbumLibrary: React.FC<AlbumLibraryProps> = ({ songs, onSelectAlbum }) => {
+const AlbumLibraryComponent: React.FC<AlbumLibraryProps> = ({ songs, onSelectAlbum }) => {
   const [viewMode, setViewMode] = useState<AlbumViewMode>(() => {
     const saved = localStorage.getItem(STORAGE_KEY_ALBUM_LIBRARY_VIEW);
     return (saved as AlbumViewMode) || 'three-col';
   });
 
+  const [albumSort, setAlbumSort] = useState<{ key: AlbumSortKey; direction: AlbumSortDirection }>(() => {
+    const saved = localStorage.getItem(STORAGE_KEY_ALBUM_SORT);
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch { /* ignore */ }
+    }
+    return { key: 'year', direction: 'desc' };
+  });
+
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY_ALBUM_LIBRARY_VIEW, viewMode);
   }, [viewMode]);
+
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEY_ALBUM_SORT, JSON.stringify(albumSort));
+  }, [albumSort]);
   
   const albumsData = useMemo(() => {
     const map = new Map<string, { count: number; year?: string; coverUrl?: string; artists: Set<string>; releaseDate?: string }>();
@@ -69,16 +86,19 @@ export const AlbumLibrary: React.FC<AlbumLibraryProps> = ({ songs, onSelectAlbum
         })()
       }))
       .sort((a, b) => {
-        // 首先按年份排序（降序）
-        if (a.year && b.year) {
-          return parseInt(b.year) - parseInt(a.year);
+        const dir = albumSort.direction === 'asc' ? 1 : -1;
+        if (albumSort.key === 'year') {
+          // 按年份排序
+          if (a.year && b.year) return dir * (parseInt(a.year) - parseInt(b.year));
+          if (a.year) return -1;
+          if (b.year) return 1;
+          return dir * a.name.localeCompare(b.name, 'zh-CN');
+        } else {
+          // 按名称排序
+          return dir * a.name.localeCompare(b.name, 'zh-CN');
         }
-        if (a.year) return -1; // 有年份的排在前面
-        if (b.year) return 1;  // 没有年份的排在后面
-        // 然后按专辑名排序
-        return a.name.localeCompare(b.name, 'zh-CN');
       });
-  }, [songs]);
+  }, [songs, albumSort]);
 
 
 
@@ -89,46 +109,72 @@ export const AlbumLibrary: React.FC<AlbumLibraryProps> = ({ songs, onSelectAlbum
           <Music className="text-brand-light" /> 专辑库 ({albumsData.length})
         </h2>
         
-        {/* View Mode Selector */}
-        <div className="flex items-center gap-1 bg-slate-100 rounded-lg p-1">
-          <button
-            onClick={() => setViewMode('three-col')}
-            className={`p-2 rounded-md transition-colors ${
-              viewMode === 'three-col' 
-                ? 'bg-white text-brand-light shadow-sm' 
-                : 'text-slate-500 hover:text-slate-700'
-            }`}
-            title="三列网格"
-          >
-            <LayoutGrid size={16} />
-          </button>
-          <button
-            onClick={() => setViewMode('two-col')}
-            className={`p-2 rounded-md transition-colors ${
-              viewMode === 'two-col' 
-                ? 'bg-white text-brand-light shadow-sm' 
-                : 'text-slate-500 hover:text-slate-700'
-            }`}
-            title="两列网格"
-          >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <rect x="3" y="3" width="7" height="7"></rect>
-              <rect x="14" y="3" width="7" height="7"></rect>
-              <rect x="3" y="14" width="7" height="7"></rect>
-              <rect x="14" y="14" width="7" height="7"></rect>
-            </svg>
-          </button>
-          <button
-            onClick={() => setViewMode('list')}
-            className={`p-2 rounded-md transition-colors ${
-              viewMode === 'list' 
-                ? 'bg-white text-brand-light shadow-sm' 
-                : 'text-slate-500 hover:text-slate-700'
-            }`}
-            title="列表视图"
-          >
-            <List size={16} />
-          </button>
+        <div className="flex items-center gap-2">
+          {/* Sort Controls */}
+          <div className="flex items-center gap-1 bg-slate-100 rounded-lg p-1">
+            <button
+              onClick={() => setAlbumSort(prev => ({ key: 'year', direction: prev.key === 'year' && prev.direction === 'desc' ? 'asc' : 'desc' }))}
+              className={`flex items-center gap-1 px-2 py-1.5 rounded-md text-xs transition-colors ${
+                albumSort.key === 'year' ? 'bg-white text-brand-light shadow-sm font-medium' : 'text-slate-500 hover:text-slate-700'
+              }`}
+              title="按年份排序"
+            >
+              <Calendar size={12} />
+              {albumSort.key === 'year' ? (albumSort.direction === 'asc' ? <ArrowUp size={10} /> : <ArrowDown size={10} />) : <ArrowUpDown size={10} />}
+            </button>
+            <button
+              onClick={() => setAlbumSort(prev => ({ key: 'name', direction: prev.key === 'name' && prev.direction === 'desc' ? 'asc' : 'desc' }))}
+              className={`flex items-center gap-1 px-2 py-1.5 rounded-md text-xs transition-colors ${
+                albumSort.key === 'name' ? 'bg-white text-brand-light shadow-sm font-medium' : 'text-slate-500 hover:text-slate-700'
+              }`}
+              title="按名称排序"
+            >
+              名
+              {albumSort.key === 'name' ? (albumSort.direction === 'asc' ? <ArrowUp size={10} /> : <ArrowDown size={10} />) : <ArrowUpDown size={10} />}
+            </button>
+          </div>
+
+          {/* View Mode Selector */}
+          <div className="flex items-center gap-1 bg-slate-100 rounded-lg p-1">
+            <button
+              onClick={() => setViewMode('three-col')}
+              className={`p-2 rounded-md transition-colors ${
+                viewMode === 'three-col' 
+                  ? 'bg-white text-brand-light shadow-sm' 
+                  : 'text-slate-500 hover:text-slate-700'
+              }`}
+              title="三列网格"
+            >
+              <LayoutGrid size={16} />
+            </button>
+            <button
+              onClick={() => setViewMode('two-col')}
+              className={`p-2 rounded-md transition-colors ${
+                viewMode === 'two-col' 
+                  ? 'bg-white text-brand-light shadow-sm' 
+                  : 'text-slate-500 hover:text-slate-700'
+              }`}
+              title="两列网格"
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="3" y="3" width="7" height="7"></rect>
+                <rect x="14" y="3" width="7" height="7"></rect>
+                <rect x="3" y="14" width="7" height="7"></rect>
+                <rect x="14" y="14" width="7" height="7"></rect>
+              </svg>
+            </button>
+            <button
+              onClick={() => setViewMode('list')}
+              className={`p-2 rounded-md transition-colors ${
+                viewMode === 'list' 
+                  ? 'bg-white text-brand-light shadow-sm' 
+                  : 'text-slate-500 hover:text-slate-700'
+              }`}
+              title="列表视图"
+            >
+              <List size={16} />
+            </button>
+          </div>
         </div>
       </div>
       
@@ -217,15 +263,15 @@ export const AlbumLibrary: React.FC<AlbumLibraryProps> = ({ songs, onSelectAlbum
 
       {/* List View */}
       {viewMode === 'list' && (
-        <div className="space-y-2 max-h-[calc(100vh-120px)] overflow-y-auto">
+        <div className="space-y-1 max-h-[calc(100vh-120px)] overflow-y-auto">
           {albumsData.map(({ name, count, year, coverUrl, artists }) => (
             <button
               key={name}
               onClick={() => onSelectAlbum(name)}
-              className="w-full flex items-center gap-4 p-3 rounded-lg hover:bg-slate-50 transition-all group text-left"
+              className="w-full flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-slate-50 transition-all group text-left"
             >
               {/* 专辑封面 */}
-              <div className="w-14 h-14 flex-shrink-0 rounded-lg overflow-hidden shadow-md">
+              <div className="w-10 h-10 flex-shrink-0 rounded overflow-hidden shadow-sm">
                 {coverUrl ? (
                   <img 
                     src={coverUrl} 
@@ -234,34 +280,32 @@ export const AlbumLibrary: React.FC<AlbumLibraryProps> = ({ songs, onSelectAlbum
                   />
                 ) : (
                   <div className="w-full h-full bg-slate-100 flex items-center justify-center">
-                    <Music size={20} className="text-slate-400" />
+                    <Music size={14} className="text-slate-400" />
                   </div>
                 )}
               </div>
 
               {/* 专辑信息 */}
               <div className="flex-1 min-w-0">
-                <p className="text-base font-semibold text-slate-800 truncate group-hover:text-brand-light transition-colors">
+                <p className="text-sm font-medium text-slate-800 truncate group-hover:text-brand-light transition-colors">
                   {name}
                 </p>
-                <p className="text-sm text-slate-500 mt-0.5 truncate">{artists}</p>
+                <p className="text-xs text-slate-400 truncate">{artists}</p>
               </div>
 
               {/* 年份和歌曲数 */}
-              <div className="flex-shrink-0 text-right text-sm text-slate-500">
+              <div className="flex-shrink-0 flex items-center gap-3 text-xs text-slate-400">
                 {year && (
-                  <div className="flex items-center gap-1 justify-end">
-                    <Calendar size={14} />
+                  <span className="flex items-center gap-0.5">
+                    <Calendar size={11} />
                     {year}
-                  </div>
+                  </span>
                 )}
-                <div className="text-xs mt-0.5">{count} 首</div>
+                <span>{count}首</span>
               </div>
 
               {/* 箭头 */}
-              <div className="flex-shrink-0 text-slate-400 group-hover:text-brand-light transition-colors">
-                <ChevronRight size={20} />
-              </div>
+              <ChevronRight size={16} className="flex-shrink-0 text-slate-300 group-hover:text-brand-light transition-colors" />
             </button>
           ))}
         </div>
@@ -275,3 +319,5 @@ export const AlbumLibrary: React.FC<AlbumLibraryProps> = ({ songs, onSelectAlbum
     </div>
   );
 };
+
+export const AlbumLibrary = React.memo(AlbumLibraryComponent);
