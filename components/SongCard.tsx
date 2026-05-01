@@ -27,11 +27,21 @@ const SongCardComponent: React.FC<SongCardProps> = ({ song, onArtistClick, onAlb
     day: 'numeric',
   });
 
-  // 修复年份显示逻辑，兼容纯数字年份格式
-  const releaseYear = song.releaseDate ? 
-    (typeof song.releaseDate === 'string' && !isNaN(Number(song.releaseDate)) 
-      ? Number(song.releaseDate) 
-      : new Date(song.releaseDate).getFullYear()) : null;
+  // 修复年份显示逻辑，兼容纯数字年份格式，并防止无效日期错误
+  let releaseYear: number | null = null;
+  if (song.releaseDate) {
+    if (typeof song.releaseDate === 'string' && !isNaN(Number(song.releaseDate))) {
+      const year = Number(song.releaseDate);
+      if (year >= 1900 && year <= 2100) {
+        releaseYear = year;
+      }
+    } else {
+      const date = new Date(song.releaseDate);
+      if (!isNaN(date.getTime())) {
+        releaseYear = date.getFullYear();
+      }
+    }
+  }
 
   const handleArtistClick = (e: React.MouseEvent, artist: string) => {
     e.stopPropagation();

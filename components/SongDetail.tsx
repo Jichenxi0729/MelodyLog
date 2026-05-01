@@ -5,7 +5,7 @@ import { Song } from '../types';
 import { fetchLyrics, addCustomLyrics, searchLyricsByTitle, fetchLyricsById, saveLyricsToSupabase, convertToSimplified } from '../services/lyricsService';
 import { ArrowLeft, Share2, Plus, Pencil, Search, Tag } from 'lucide-react';
 import { LyricsEditor } from './LyricsEditor';
-import { getTagsNameList, addTagToHistory } from '../utils/tagUtils';
+import { getTagsFromSongs, addTagToHistory } from '../utils/tagUtils';
 
 // 添加全局动画样式
 const styleSheet = document.createElement('style');
@@ -200,9 +200,18 @@ export const SongDetail: React.FC<SongDetailProps> = ({ songs, songId, onBack, o
       const foundSong = songs.find(s => s.id === songId);
       if (foundSong) {
         setSong(foundSong);
+        // 如果不在编辑模式，也要更新编辑状态，确保编辑时有最新数据
+        if (!isEditing) {
+          setEditedTitle(foundSong.title);
+          setEditedArtists([...foundSong.artists]);
+          setEditedAlbum(foundSong.album || '');
+          setEditedCoverUrl(foundSong.coverUrl || '');
+          setEditedReleaseDate(foundSong.releaseDate || '');
+          setEditedTags(foundSong.tags || []);
+        }
       }
     }
-  }, [songId, songs]);
+  }, [songId, songs, isEditing]);
   
   // 使用props传入的onBack函数，不再使用navigate(-1)
 
@@ -307,6 +316,7 @@ export const SongDetail: React.FC<SongDetailProps> = ({ songs, songId, onBack, o
       setEditedTags([...editedTags, tagName]);
     }
     setNewTag('');
+    setShowTagsHistory(false);
   };
 
   // 处理艺术家变化
@@ -778,16 +788,16 @@ export const SongDetail: React.FC<SongDetailProps> = ({ songs, songId, onBack, o
                           className="w-full text-xs px-2 py-1 bg-gray-100 border border-gray-200 rounded-full focus:border-amber-300 focus:outline-none"
                         />
                         {/* 智能匹配标签下拉列表 */}
-                        {showTagsHistory && getTagsNameList().length > 0 && (
+                        {showTagsHistory && getTagsFromSongs(songs).length > 0 && (
                           <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-50 max-h-40 overflow-y-auto">
                             <div className="sticky top-0 bg-gray-50 px-3 py-2 border-b border-gray-100 flex items-center gap-2">
                               <Tag className="w-3 h-3 text-gray-400" />
                               <span className="text-xs text-gray-500">已有标签</span>
                             </div>
                             <div className="py-1">
-                              {getTagsNameList()
+                              {getTagsFromSongs(songs)
                                 .filter(tagName => !editedTags.includes(tagName))
-                                .filter(tagName => newTag === '' || tagName.includes(newTag))
+                                .filter(tagName => newTag === '' || tagName.toLowerCase().includes(newTag.toLowerCase()))
                                 .slice(0, 10)
                                 .map((tagName, idx) => {
                                   const tagColorOptions = [
@@ -890,13 +900,19 @@ export const SongDetail: React.FC<SongDetailProps> = ({ songs, songId, onBack, o
                   )}
                   
                   {song.releaseDate && (() => {
-                    let releaseYear;
+                    let releaseYear: number | null = null;
                     if (typeof song.releaseDate === 'string' && !isNaN(Number(song.releaseDate))) {
-                      releaseYear = Number(song.releaseDate);
+                      const year = Number(song.releaseDate);
+                      if (year >= 1900 && year <= 2100) {
+                        releaseYear = year;
+                      }
                     } else {
-                      releaseYear = new Date(song.releaseDate).getFullYear();
+                      const date = new Date(song.releaseDate);
+                      if (!isNaN(date.getTime())) {
+                        releaseYear = date.getFullYear();
+                      }
                     }
-                    return !isNaN(releaseYear) && (
+                    return releaseYear !== null && (
                       <p className="text-xs text-gray-500 mb-1">
                         发行日期: <span className="text-gray-700">{releaseYear}</span>
                       </p>

@@ -6,6 +6,21 @@ export interface TagInfo {
   lastUsed: number;
 }
 
+// 从歌曲列表中提取所有唯一标签
+export const getTagsFromSongs = (songs: any[]): string[] => {
+  const tagSet = new Set<string>();
+  songs.forEach(song => {
+    if (song.tags && Array.isArray(song.tags)) {
+      song.tags.forEach((tag: string) => {
+        if (tag && typeof tag === 'string') {
+          tagSet.add(tag);
+        }
+      });
+    }
+  });
+  return Array.from(tagSet).sort();
+};
+
 export const getTagsHistory = (): TagInfo[] => {
   try {
     const stored = localStorage.getItem(TAGS_STORAGE_KEY);

@@ -18,6 +18,7 @@ import { setCache, getCache, clearCache } from './utils/cacheUtils';
 import { getAllSongs, addSong, addSongs, updateSong, deleteSong } from './services/supabaseService';
 import { getCurrentUser, signOut, onAuthStateChange } from './services/authService';
 import { User as AuthUser } from './services/authService';
+import { fetchLyrics } from './services/lyricsService';
 
 // Constants
 // localStorage key for song data - used for migration only
@@ -243,9 +244,18 @@ const App: React.FC = () => {
         // 年份搜索逻辑
         if (searchYear !== null) {
           if (s.releaseDate) {
-            const songYear = typeof s.releaseDate === 'string' && !isNaN(Number(s.releaseDate)) 
-              ? Number(s.releaseDate) 
-              : new Date(s.releaseDate).getFullYear();
+            let songYear: number | null = null;
+            if (typeof s.releaseDate === 'string' && !isNaN(Number(s.releaseDate))) {
+              const year = Number(s.releaseDate);
+              if (year >= 1900 && year <= 2100) {
+                songYear = year;
+              }
+            } else {
+              const date = new Date(s.releaseDate);
+              if (!isNaN(date.getTime())) {
+                songYear = date.getFullYear();
+              }
+            }
             return songYear === searchYear;
           }
           return false;
@@ -277,9 +287,27 @@ const App: React.FC = () => {
           if (!a.releaseDate && !b.releaseDate) return 0;
           if (!a.releaseDate) return 1;
           if (!b.releaseDate) return -1;
-          const dateA = new Date(a.releaseDate).getTime();
-          const dateB = new Date(b.releaseDate).getTime();
-          return sortDirection * (dateA - dateB);
+          
+          // Helper function to safely get timestamp
+          const getSafeTimestamp = (dateStr: string) => {
+            if (typeof dateStr === 'string' && !isNaN(Number(dateStr))) {
+              const year = Number(dateStr);
+              if (year >= 1900 && year <= 2100) {
+                return new Date(year, 0, 1).getTime();
+              }
+            }
+            const date = new Date(dateStr);
+            return !isNaN(date.getTime()) ? date.getTime() : null;
+          };
+          
+          const timeA = getSafeTimestamp(a.releaseDate);
+          const timeB = getSafeTimestamp(b.releaseDate);
+          
+          if (timeA === null && timeB === null) return 0;
+          if (timeA === null) return 1;
+          if (timeB === null) return -1;
+          
+          return sortDirection * (timeA - timeB);
         });
       case 'addedAt':
       default:
@@ -377,13 +405,24 @@ const App: React.FC = () => {
       album: matchedAlbum,
       coverUrl: matchedCoverUrl,
       releaseDate: matchedReleaseDate,
-      tags,
+      tags: tags && tags.length > 0 ? tags : [], // 始终设置为数组
       addedAt: Date.now()
     };
 
     try {
       // Add to Supabase（现在会抛出错误而不是返回null）
       const addedSong = await addSong(newSong);
+      
+      // 自动获取并保存歌词
+      try {
+        const artist = addedSong.artists[0];
+        await fetchLyrics(addedSong.id, addedSong.title, artist);
+        console.log('歌词自动获取成功:', addedSong.title);
+      } catch (error) {
+        console.warn('歌词自动获取失败:', error);
+        // 即使失败也不影响歌曲添加
+      }
+      
       // 使用函数式更新，避免依赖songs数组
       setSongs(prevSongs => {
         const updatedSongs = [addedSong, ...prevSongs];
@@ -490,6 +529,7 @@ const App: React.FC = () => {
                 album: songInfo.album || undefined,
                 coverUrl: songInfo.coverUrl || undefined,
                 releaseDate: songInfo.releaseDate || undefined,
+                tags: songInfo.tags || [], // 添加tags字段
                 addedAt: songInfo.addedAt ? 
                   (typeof songInfo.addedAt === 'string' ? new Date(songInfo.addedAt).getTime() : songInfo.addedAt) : 
                   Date.now()
@@ -546,6 +586,7 @@ const App: React.FC = () => {
               coverUrl: coverUrl || undefined,
               releaseDate: releaseDate || undefined,
               album: matchedAlbum || undefined,
+              tags: [], // 添加tags字段
               addedAt: Date.now()
             });
             
@@ -564,6 +605,27 @@ const App: React.FC = () => {
       try {
         // 使用批量添加功能添加所有新歌曲到Supabase
         const addedSongs = await addSongs(newSongs);
+        
+        // 批量自动获取并保存歌词
+        const fetchAllLyrics = async () => {
+          for (const song of addedSongs) {
+            try {
+              const artist = song.artists[0];
+              await fetchLyrics(song.id, song.title, artist);
+              console.log('歌词自动获取成功:', song.title);
+            } catch (error) {
+              console.warn('歌词自动获取失败:', song.title, error);
+            }
+            // 添加短暂延迟，避免请求过快
+            await new Promise(resolve => setTimeout(resolve, 100));
+          }
+        };
+        
+        // 不阻塞UI，异步获取歌词
+        fetchAllLyrics().catch(error => {
+          console.error('批量获取歌词失败:', error);
+        });
+        
         // Update local state and cache
         const updatedSongs = [...addedSongs, ...songs];
         setSongs(updatedSongs);

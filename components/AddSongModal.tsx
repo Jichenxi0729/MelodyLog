@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { X, Music, User, Disc, Loader2, Search, Check, ChevronDown, ChevronUp, Tag } from 'lucide-react';
 import { musicApi, SongInfo } from '../services/musicApiAdapter';
-import { getTagsNameList, addTagToHistory, getNextColorIndex } from '../utils/tagUtils';
+import { getTagsFromSongs, addTagToHistory, getNextColorIndex } from '../utils/tagUtils';
 
 interface AddSongModalProps {
   isOpen: boolean;
@@ -269,8 +269,8 @@ export const AddSongModal: React.FC<AddSongModalProps> = ({ isOpen, onClose, onA
   };
 
   // 添加标签
-  const handleAddTag = (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleAddTag = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
     if (newTag.trim() && !tags.includes(newTag.trim())) {
       const colorIndex = getNextColorIndex();
       addTagToHistory(newTag.trim(), colorIndex);
@@ -288,6 +288,7 @@ export const AddSongModal: React.FC<AddSongModalProps> = ({ isOpen, onClose, onA
       setTags([...tags, tagName]);
     }
     setNewTag('');
+    setShowTagsHistory(false);
   };
 
   // 删除标签
@@ -615,28 +616,29 @@ export const AddSongModal: React.FC<AddSongModalProps> = ({ isOpen, onClose, onA
                           })}
                         </div>
                       )}
-                      {/* 添加标签的表单 */}
-                      <form onSubmit={handleAddTag} className="flex gap-2">
+                      {/* 添加标签的表单 - 移除了 form 标签避免嵌套问题 */}
+                      <div className="flex gap-2">
                         <div className="flex-1 relative">
                           <input
                             type="text"
                             value={newTag}
                             onChange={(e) => setNewTag(e.target.value)}
                             onFocus={() => setShowTagsHistory(true)}
+                            onKeyPress={(e) => e.key === 'Enter' && handleAddTag(e as any)}
                             placeholder="添加记忆标签（可选）"
                             className="w-full text-xs px-4 py-3 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-light focus:border-brand-light outline-none transition-all"
                           />
                           {/* 智能匹配标签下拉列表 */}
-                          {showTagsHistory && getTagsNameList().length > 0 && (
-                            <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-lg shadow-lg z-10 max-h-40 overflow-y-auto">
+                          {showTagsHistory && getTagsFromSongs(songs).length > 0 && (
+                            <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-lg shadow-xl z-50 max-h-40 overflow-y-auto">
                               <div className="sticky top-0 bg-slate-50 px-3 py-2 border-b border-slate-100 flex items-center gap-2">
                                 <Tag className="w-3 h-3 text-slate-400" />
                                 <span className="text-xs text-slate-500">已有标签</span>
                               </div>
                               <div className="py-1">
-                                {getTagsNameList()
+                                {getTagsFromSongs(songs)
                                   .filter(tagName => !tags.includes(tagName))
-                                  .filter(tagName => newTag === '' || tagName.includes(newTag))
+                                  .filter(tagName => newTag === '' || tagName.toLowerCase().includes(newTag.toLowerCase()))
                                   .slice(0, 10)
                                   .map((tagName, idx) => {
                                     const tagColorOptions = [
@@ -664,13 +666,14 @@ export const AddSongModal: React.FC<AddSongModalProps> = ({ isOpen, onClose, onA
                           )}
                         </div>
                         <button
-                          type="submit"
+                          type="button"
+                          onClick={handleAddTag}
                           disabled={!newTag.trim()}
                           className="px-4 py-3 bg-pink-500 hover:bg-pink-600 text-white text-xs font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                           添加
                         </button>
-                      </form>
+                      </div>
                       {/* 点击其他地方关闭历史标签列表 */}
                       {showTagsHistory && (
                         <div 
