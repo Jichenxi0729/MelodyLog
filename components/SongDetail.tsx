@@ -288,7 +288,7 @@ export const SongDetail: React.FC<SongDetailProps> = ({ songs, songId, onBack, o
     { bg: 'bg-amber-50', text: 'text-amber-600' },
     { bg: 'bg-lime-50', text: 'text-lime-600' },
     { bg: 'bg-sky-50', text: 'text-sky-600' },
-    { bg: 'bg-violet-50', text: 'text-violet-600' },
+    { bg: 'bg-blue-50', text: 'text-blue-600' },
     { bg: 'bg-orange-50', text: 'text-orange-600' },
   ];
   
@@ -768,7 +768,7 @@ export const SongDetail: React.FC<SongDetailProps> = ({ songs, songId, onBack, o
                     type="text"
                     value={editedTitle}
                     onChange={(e) => setEditedTitle(e.target.value)}
-                    className="text-xl font-bold text-slate-900 tracking-tight w-full border-b-2 border-slate-200 focus:border-violet-500 focus:outline-none pb-2 bg-transparent"
+                    className="text-xl font-bold text-slate-900 tracking-tight w-full border-b-2 border-slate-200 focus:border-blue-500 focus:outline-none pb-2 bg-transparent"
                   />
                   
                   <div className="space-y-2">
@@ -778,7 +778,7 @@ export const SongDetail: React.FC<SongDetailProps> = ({ songs, songId, onBack, o
                           type="text"
                           value={artist}
                           onChange={(e) => handleArtistChange(index, e.target.value)}
-                          className="text-base text-violet-600 font-medium w-full border-b border-slate-200 focus:border-violet-500 focus:outline-none pb-1 bg-transparent"
+                          className="text-base text-blue-600 font-medium w-full border-b border-slate-200 focus:border-blue-500 focus:outline-none pb-1 bg-transparent"
                         />
                         {editedArtists.length > 1 && (
                           <button
@@ -792,7 +792,7 @@ export const SongDetail: React.FC<SongDetailProps> = ({ songs, songId, onBack, o
                     ))}
                     <button
                       onClick={handleAddArtist}
-                      className="text-violet-500 hover:text-violet-700 text-sm font-medium"
+                      className="text-blue-500 hover:text-blue-700 text-sm font-medium"
                     >
                       + 添加艺术家
                     </button>
@@ -803,7 +803,7 @@ export const SongDetail: React.FC<SongDetailProps> = ({ songs, songId, onBack, o
                     value={editedAlbum}
                     onChange={(e) => setEditedAlbum(e.target.value)}
                     placeholder="专辑名称"
-                    className="text-sm text-slate-500 w-full border-b border-slate-200 focus:border-violet-500 focus:outline-none pb-1 bg-transparent"
+                    className="text-sm text-slate-500 w-full border-b border-slate-200 focus:border-blue-500 focus:outline-none pb-1 bg-transparent"
                   />
 
                   <input
@@ -811,7 +811,7 @@ export const SongDetail: React.FC<SongDetailProps> = ({ songs, songId, onBack, o
                     value={editedCoverUrl}
                     onChange={(e) => setEditedCoverUrl(e.target.value)}
                     placeholder="封面图片URL"
-                    className="text-sm text-slate-500 w-full border-b border-slate-200 focus:border-violet-500 focus:outline-none pb-1 bg-transparent"
+                    className="text-sm text-slate-500 w-full border-b border-slate-200 focus:border-blue-500 focus:outline-none pb-1 bg-transparent"
                   />
 
                   <input
@@ -819,7 +819,7 @@ export const SongDetail: React.FC<SongDetailProps> = ({ songs, songId, onBack, o
                     value={editedReleaseDate}
                     onChange={(e) => setEditedReleaseDate(e.target.value)}
                     placeholder="发行日期 (YYYY-MM-DD)"
-                    className="text-sm text-slate-500 w-full border-b border-slate-200 focus:border-violet-500 focus:outline-none pb-1 bg-transparent"
+                    className="text-sm text-slate-500 w-full border-b border-slate-200 focus:border-blue-500 focus:outline-none pb-1 bg-transparent"
                   />
                   
                   {/* 标签编辑 */}
@@ -849,7 +849,7 @@ export const SongDetail: React.FC<SongDetailProps> = ({ songs, songId, onBack, o
                           onChange={(e) => setNewTag(e.target.value)}
                           onFocus={() => setShowTagsHistory(true)}
                           placeholder="添加记忆标签..."
-                          className="w-full text-xs px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:border-violet-300 focus:bg-white focus:ring-2 focus:ring-violet-100 focus:outline-none transition-all"
+                          className="w-full text-xs px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:border-blue-300 focus:bg-white focus:ring-2 focus:ring-blue-100 focus:outline-none transition-all"
                         />
                         {/* 智能匹配标签下拉列表 */}
                         {showTagsHistory && getTagsFromSongs(songs).length > 0 && (
@@ -869,7 +869,7 @@ export const SongDetail: React.FC<SongDetailProps> = ({ songs, songId, onBack, o
                                     { bg: 'bg-amber-50', text: 'text-amber-700' },
                                     { bg: 'bg-lime-50', text: 'text-lime-700' },
                                     { bg: 'bg-sky-50', text: 'text-sky-700' },
-                                    { bg: 'bg-purple-50', text: 'text-purple-700' },
+                                    { bg: 'bg-blue-50', text: 'text-blue-700' },
                                     { bg: 'bg-orange-50', text: 'text-orange-700' }
                                   ];
                                   const color = tagColorOptions[idx % tagColorOptions.length];
@@ -891,7 +891,7 @@ export const SongDetail: React.FC<SongDetailProps> = ({ songs, songId, onBack, o
                       <button
                         type="submit"
                         disabled={!newTag.trim()}
-                        className="px-4 py-2 bg-violet-500 text-white rounded-lg text-xs font-medium hover:bg-violet-600 disabled:opacity-50 transition-colors"
+                        className="px-4 py-2 bg-blue-500 text-white rounded-lg text-xs font-medium hover:bg-blue-600 disabled:opacity-50 transition-colors"
                       >
                         添加
                       </button>
@@ -908,7 +908,7 @@ export const SongDetail: React.FC<SongDetailProps> = ({ songs, songId, onBack, o
                   <div className="flex gap-2.5 mt-4 pt-3 border-t border-slate-100">
                     <button
                       onClick={handleSave}
-                      className="px-5 py-2 bg-violet-600 text-white rounded-lg text-sm font-medium hover:bg-violet-700 transition-colors shadow-sm"
+                      className="px-5 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors shadow-sm"
                     >
                       保存
                     </button>
@@ -927,24 +927,24 @@ export const SongDetail: React.FC<SongDetailProps> = ({ songs, songId, onBack, o
                     <h1 className="text-lg sm:text-xl font-bold text-slate-900 tracking-tight">{song.title}</h1>
                     <button
                       onClick={handleEdit}
-                      className="p-1.5 text-slate-400 hover:text-violet-600 hover:bg-violet-50 rounded-lg transition-all"
+                      className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
                       title="编辑歌曲信息"
                     >
                       <Pencil size={16} />
                     </button>
                   </div>
                   
-                  <div className="text-sm sm:text-base text-violet-600 font-medium pl-0.5">
+                  <div className="text-sm sm:text-base text-blue-600 font-medium pl-0.5">
                     {song.artists.map((artist, index) => (
                       <React.Fragment key={artist}>
                         <span 
                           onClick={() => onArtistClick?.(artist)}
-                          className="cursor-pointer hover:underline hover:text-violet-700 transition-colors"
+                          className="cursor-pointer hover:underline hover:text-blue-700 transition-colors"
                           title={`查看 ${artist} 的详情`}
                         >
                           {artist}
                         </span>
-                        {index < song.artists.length - 1 && <span className="text-violet-300 mx-1">/</span>}
+                        {index < song.artists.length - 1 && <span className="text-blue-300 mx-1">/</span>}
                       </React.Fragment>
                     ))}
                   </div>
@@ -1030,13 +1030,13 @@ export const SongDetail: React.FC<SongDetailProps> = ({ songs, songId, onBack, o
               <div className="flex bg-slate-100 rounded-lg p-1">
                 <button 
                   onClick={() => setLyricsViewMode('saved')}
-                  className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all ${lyricsViewMode === 'saved' ? 'bg-white text-violet-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                  className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all ${lyricsViewMode === 'saved' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
                 >
                   我的
                 </button>
                 <button 
                   onClick={() => setLyricsViewMode('recommended')}
-                  className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all ${lyricsViewMode === 'recommended' ? 'bg-white text-violet-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                  className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all ${lyricsViewMode === 'recommended' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
                 >
                   推荐
                 </button>
@@ -1096,7 +1096,7 @@ export const SongDetail: React.FC<SongDetailProps> = ({ songs, songId, onBack, o
                   <div className="space-y-3">
                     {recommendedLyrics.map((lyricGroup, groupIndex) => (
                       <div key={groupIndex}>
-                        <p className="text-slate-700 bg-gradient-to-r from-violet-50/50 to-transparent p-4 rounded-xl transition-all duration-300 hover:shadow-md hover:from-violet-50 text-center text-sm leading-relaxed border border-violet-100/50">
+                        <p className="text-slate-700 bg-gradient-to-r from-blue-50/50 to-transparent p-4 rounded-xl transition-all duration-300 hover:shadow-md hover:from-blue-50 text-center text-sm leading-relaxed border border-blue-100/50">
                           「{lyricGroup.join('，')}。」
                         </p>
                       </div>
@@ -1172,7 +1172,7 @@ export const SongDetail: React.FC<SongDetailProps> = ({ songs, songId, onBack, o
               <button 
                 onClick={handleSearchLyrics}
                 disabled={buttonLoading}
-                className="p-2 bg-violet-50 hover:bg-violet-100 text-violet-600 rounded-lg transition-colors disabled:opacity-50"
+                className="p-2 bg-blue-50 hover:bg-blue-100 text-blue-600 rounded-lg transition-colors disabled:opacity-50"
                 title="搜索歌词"
               >
                 <Search size={15} />
@@ -1183,7 +1183,7 @@ export const SongDetail: React.FC<SongDetailProps> = ({ songs, songId, onBack, o
           {loading ? (
             <div className="flex flex-col justify-center items-center h-40 gap-4">
               <div className="relative">
-                <div className="w-10 h-10 border-2 border-slate-200 border-t-violet-500 rounded-full animate-spin"></div>
+                <div className="w-10 h-10 border-2 border-slate-200 border-t-blue-500 rounded-full animate-spin"></div>
               </div>
               <p className="text-slate-400 text-sm">正在获取歌词...</p>
             </div>
@@ -1235,8 +1235,8 @@ export const SongDetail: React.FC<SongDetailProps> = ({ songs, songId, onBack, o
             <div className="bg-white rounded-2xl p-6 max-w-md w-full max-h-[80vh] overflow-auto animate-slide-up shadow-2xl border border-slate-100">
               <div className="flex justify-between items-center mb-5">
                 <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2.5">
-                  <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-violet-100 to-purple-50 flex items-center justify-center">
-                    <Search size={16} className="text-violet-500" />
+                  <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-100 to-indigo-50 flex items-center justify-center">
+                    <Search size={16} className="text-blue-500" />
                   </div>
                   搜索歌词
                 </h3>
@@ -1259,7 +1259,7 @@ export const SongDetail: React.FC<SongDetailProps> = ({ songs, songId, onBack, o
               {searchLoading ? (
                 <div className="flex flex-col justify-center items-center py-14 gap-4">
                   <div className="relative w-10 h-10">
-                    <div className="absolute inset-0 border-2 border-slate-200 border-t-violet-500 rounded-full animate-spin"></div>
+                    <div className="absolute inset-0 border-2 border-slate-200 border-t-blue-500 rounded-full animate-spin"></div>
                   </div>
                   <p className="text-slate-400 text-sm font-medium">正在搜索歌词...</p>
                 </div>
@@ -1268,10 +1268,10 @@ export const SongDetail: React.FC<SongDetailProps> = ({ songs, songId, onBack, o
                   {searchResults.map((result, index) => (
                     <div 
                       key={index} 
-                      className="p-4 bg-slate-50/80 rounded-xl hover:bg-violet-50 transition-all cursor-pointer border border-transparent hover:border-violet-200 group"
+                      className="p-4 bg-slate-50/80 rounded-xl hover:bg-blue-50 transition-all cursor-pointer border border-transparent hover:border-blue-200 group"
                       onClick={() => handleSelectLyrics(result)}
                     >
-                      <div className="font-semibold text-slate-900 mb-1 group-hover:text-violet-700 transition-colors">{result.name || result.title}</div>
+                      <div className="font-semibold text-slate-900 mb-1 group-hover:text-blue-700 transition-colors">{result.name || result.title}</div>
                       <div className="text-sm text-slate-600 mb-0.5">{result.artistName || result.artist}</div>
                       {result.albumName && (
                         <div className="text-xs text-slate-400 flex items-center gap-1">
@@ -1320,9 +1320,9 @@ export const SongDetail: React.FC<SongDetailProps> = ({ songs, songId, onBack, o
               
               <div className="flex flex-col md:flex-row gap-8 items-center md:items-start">
                 {/* 海报预览区域 - 3:4比例 */}
-                <div ref={posterRef} className="aspect-[3/4] w-full md:w-[220px] bg-gradient-to-br from-violet-50 via-white to-pink-50 rounded-2xl overflow-hidden relative shadow-lg border border-slate-200 shrink-0">
+                <div ref={posterRef} className="aspect-[3/4] w-full md:w-[220px] bg-gradient-to-br from-blue-50 via-white to-sky-50 rounded-2xl overflow-hidden relative shadow-lg border border-slate-200 shrink-0">
                   {/* 顶部装饰 */}
-                  <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-violet-400 via-pink-400 to-blue-400"></div>
+                  <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-blue-400 via-cyan-400 to-sky-400"></div>
                   
                   {/* 歌词卡片内容 */}
                   <div className="absolute inset-0 p-5 flex flex-col">
@@ -1411,7 +1411,7 @@ export const SongDetail: React.FC<SongDetailProps> = ({ songs, songId, onBack, o
                           showToast('分享时发生错误，请稍后再试。', 'error');
                         }
                       }}
-                      className="w-full py-3 bg-gradient-to-r from-violet-500 to-indigo-500 hover:from-violet-600 hover:to-indigo-600 text-white rounded-xl font-medium transition-all shadow-sm hover:shadow-md flex items-center justify-center gap-2 cursor-pointer"
+                      className="w-full py-3 bg-gradient-to-r from-blue-500 to-cyan-500 hover:from-blue-600 hover:to-cyan-600 text-white rounded-xl font-medium transition-all shadow-sm hover:shadow-md flex items-center justify-center gap-2 cursor-pointer"
                     >
                       <Share2 size={18} />
                       直接分享
