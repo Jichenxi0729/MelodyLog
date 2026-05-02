@@ -1,6 +1,6 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import { Song } from '../types';
-import { ArrowLeft, Disc, LayoutGrid, List, Calendar, Music } from 'lucide-react';
+import { ArrowLeft, Disc, LayoutGrid, List, Calendar, Music, ChevronRight } from 'lucide-react';
 
 type ViewMode = 'grid' | 'list';
 
@@ -166,16 +166,16 @@ export const ArtistAlbums: React.FC<ArtistAlbumsProps> = ({ artist, songs, onBac
             ))}
           </div>
         ) : (
-          /* List View */
-          <div className="space-y-3">
+          /* List View - 与 AlbumLibrary 保持一致的紧凑样式 */
+          <div className="space-y-1 max-h-[calc(100vh-120px)] overflow-y-auto">
             {artistAlbums.map((album) => (
               <button
                 key={album.name}
                 onClick={() => onAlbumClick(album.name)}
-                className="w-full flex items-center gap-4 p-3 rounded-lg hover:bg-slate-50 transition-all group text-left"
+                className="w-full flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-slate-50 transition-all group text-left"
               >
                 {/* Album Cover */}
-                <div className="w-16 h-16 flex-shrink-0 rounded-lg overflow-hidden shadow-md">
+                <div className="w-10 h-10 flex-shrink-0 rounded overflow-hidden shadow-sm">
                   {album.coverUrl ? (
                     <img 
                       src={album.coverUrl} 
@@ -184,36 +184,33 @@ export const ArtistAlbums: React.FC<ArtistAlbumsProps> = ({ artist, songs, onBac
                     />
                   ) : (
                     <div className="w-full h-full bg-slate-100 flex items-center justify-center">
-                      <Disc size={24} className="text-slate-400" />
+                      <Disc size={14} className="text-slate-400" />
                     </div>
                   )}
                 </div>
 
                 {/* Album Info */}
                 <div className="flex-1 min-w-0">
-                  <p className="text-base font-semibold text-slate-800 truncate group-hover:text-brand-light transition-colors">
+                  <p className="text-sm font-medium text-slate-800 truncate group-hover:text-brand-light transition-colors">
                     {album.name}
                   </p>
-                  <p className="text-sm text-slate-500 mt-1 flex items-center gap-2">
-                    <span className="flex items-center gap-1">
-                      <Music size={14} />
-                      {album.songCount} 首
-                    </span>
-                    {getReleaseYear(album.releaseDate) && (
-                      <span className="flex items-center gap-1">
-                        <Calendar size={14} />
-                        {getReleaseYear(album.releaseDate)}
-                      </span>
-                    )}
+                  <p className="text-xs text-slate-400 truncate">
+                    {album.songCount} 首
                   </p>
                 </div>
 
-                {/* Arrow */}
-                <div className="flex-shrink-0 text-slate-400 group-hover:text-brand-light transition-colors">
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <polyline points="9 18 15 12 9 6"></polyline>
-                  </svg>
+                {/* Year and Count */}
+                <div className="flex-shrink-0 flex items-center gap-3 text-xs text-slate-400">
+                  {getReleaseYear(album.releaseDate) && (
+                    <span className="flex items-center gap-0.5">
+                      <Calendar size={11} />
+                      {getReleaseYear(album.releaseDate)}
+                    </span>
+                  )}
                 </div>
+
+                {/* Arrow */}
+                <ChevronRight size={16} className="flex-shrink-0 text-slate-300 group-hover:text-brand-light transition-colors" />
               </button>
             ))}
           </div>

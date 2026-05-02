@@ -1,10 +1,10 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import html2canvas from 'html2canvas';
 import { useNavigate } from 'react-router-dom';
 import { Song } from '../types';
 import { fetchLyrics, addCustomLyrics, searchLyricsByTitle, fetchLyricsById, saveLyricsToSupabase, convertToSimplified } from '../services/lyricsService';
 import { useToast } from './Toast';
-import { ArrowLeft, Share2, Plus, Pencil, Search, Tag } from 'lucide-react';
+import { ArrowLeft, Share2, Plus, Pencil, Search, Tag, Disc, Calendar } from 'lucide-react';
 import { LyricsEditor } from './LyricsEditor';
 import { getTagsFromSongs, addTagToHistory } from '../utils/tagUtils';
 
@@ -98,6 +98,7 @@ export const SongDetail: React.FC<SongDetailProps> = ({ songs, songId, onBack, o
   // 使用props传入的songId而不是从URL参数获取
   const navigate = useNavigate();
   const { showToast } = useToast();
+  const posterRef = useRef<HTMLDivElement>(null);
   // 状态管理
   const [song, setSong] = useState<Song | null>(null);
   const [lyrics, setLyrics] = useState<string[]>([]);
@@ -349,16 +350,63 @@ export const SongDetail: React.FC<SongDetailProps> = ({ songs, songId, onBack, o
   
   // 实现海报下载功能
   const handleDownloadPoster = () => {
-    // 找到海报预览元素
-    const posterElement = document.querySelector('.aspect-\[3\/4\].w-full') as HTMLElement;
-    
-    if (posterElement) {
-      // 使用html2canvas将海报元素转换为图片
-      html2canvas(posterElement, {
-        scale: 2, // 提高图片质量
-        useCORS: true, // 允许跨域图片
-        allowTaint: true,
-        backgroundColor: null
+    if (!posterRef.current) {
+      console.error('未找到海报元素');
+      showToast('无法找到海报元素，请稍后再试。', 'error');
+      return;
+    }
+
+    showToast('正在生成海报...', 'info');
+
+    const element = posterRef.current;
+    // 先克隆节点，避免影响原页面
+    const clone = element.cloneNode(true) as HTMLElement;
+
+    // 处理克隆中的图片，确保 crossOrigin 设置正确
+    const imgs = clone.querySelectorAll('img');
+    imgs.forEach(img => {
+      img.crossOrigin = 'anonymous';
+    });
+
+    // 将克隆的元素临时放入 body 以便渲染
+    clone.style.position = 'fixed';
+    clone.style.left = '-9999px';
+    clone.style.top = '0';
+    document.body.appendChild(clone);
+
+    // 使用html2canvas将海报元素转换为图片
+    html2canvas(clone, {
+      scale: 2,
+      useCORS: true,
+      allowTaint: true,
+      backgroundColor: '#ffffff',
+      width: element.offsetWidth,
+      height: element.offsetHeight,
+    }).then(canvas => {
+      try {
+        const dataUrl = canvas.toDataURL('image/png');
+        const downloadLink = document.createElement('a');
+        downloadLink.href = dataUrl;
+        downloadLink.download = `${song?.title || 'song'}_poster.png`;
+        document.body.appendChild(downloadLink);
+        downloadLink.click();
+        document.body.removeChild(downloadLink);
+        showToast('海报已下载', 'success');
+        setShowShareModal(false);
+      } catch (error) {
+        console.error('下载海报失败:', error);
+        showToast('下载海报时发生错误，请稍后再试。', 'error');
+      }
+    }).catch(error => {
+      console.error('生成海报图片失败:', error);
+      // 尝试不使用 CORS 的降级方案
+      html2canvas(clone, {
+        scale: 2,
+        useCORS: false,
+        allowTaint: false,
+        backgroundColor: '#ffffff',
+        width: element.offsetWidth,
+        height: element.offsetHeight,
       }).then(canvas => {
         try {
           const dataUrl = canvas.toDataURL('image/png');
@@ -368,21 +416,21 @@ export const SongDetail: React.FC<SongDetailProps> = ({ songs, songId, onBack, o
           document.body.appendChild(downloadLink);
           downloadLink.click();
           document.body.removeChild(downloadLink);
-        } catch (error) {
-          console.error('下载海报失败:', error);
+          showToast('海报已下载（封面图片可能为空白）', 'success');
+          setShowShareModal(false);
+        } catch (err2) {
+          console.error('降级下载也失败:', err2);
           showToast('下载海报时发生错误，请稍后再试。', 'error');
         }
-      }).catch(error => {
-        console.error('生成海报图片失败:', error);
+      }).catch(() => {
         showToast('生成海报图片时发生错误，请稍后再试。', 'error');
       });
-    } else {
-      console.error('未找到海报元素');
-      showToast('无法找到海报元素，请稍后再试。', 'error');
-    }
-    
-    // 关闭模态框
-    setShowShareModal(false);
+    }).finally(() => {
+      // 清理临时克隆节点
+      if (clone.parentNode === document.body) {
+        document.body.removeChild(clone);
+      }
+    });
   };
 
   const handleSaveLyrics = () => {
@@ -677,28 +725,29 @@ export const SongDetail: React.FC<SongDetailProps> = ({ songs, songId, onBack, o
   return (
     <div className="min-h-screen bg-white text-gray-800">
 
-      <main className="pt-2 pb-10 px-0.5 max-w-3xl mx-auto">
+      <main className="pt-0.1 pb-5 px-0.5 max-w-2xl mx-auto">
         {/* 返回按钮和分享按钮 */}
-        <div className="flex justify-between items-center mb-4">
+        <div className="flex justify-between items-center mb-3">
           <button 
             onClick={onBack}
-            className="flex items-center gap-1 text-slate-500 hover:text-brand-light text-sm font-medium transition-colors"
+            className="flex items-center gap-1 text-slate-500 hover:text-slate-800 text-sm font-medium transition-colors px-2 py-1.5 rounded-lg hover:bg-slate-100"
           >
             <ArrowLeft size={16} /> 返回
           </button>
           <button 
             onClick={handleShare}
-            className="flex items-center gap-1 text-slate-500 hover:text-brand-light text-sm font-medium transition-colors"
+            className="flex items-center gap-1 text-slate-500 hover:text-slate-800 text-sm font-medium transition-colors px-2 py-1.5 rounded-lg hover:bg-slate-100"
           >
             <Share2 size={16} /> 分享
           </button>
         </div>
 
         {/* 歌曲信息卡片 */}
-        <section className="mb-4 bg-blue-50/20 rounded-xl p-3 shadow-md transform hover:shadow-lg transition-shadow duration-300">
-          <div className="flex flex-row items-center gap-3">
-            <div className="relative">
-              <div className="w-28 h-28 md:w-36 md:h-36 rounded-lg overflow-hidden shadow-md">
+        <section className="bg-white rounded-xl p-3 shadow-sm border border-slate-100 mb-4">
+          <div className="flex flex-row items-start gap-3.5">
+            {/* 封面图片 */}
+            <div className="relative group shrink-0">
+              <div className="w-31 h-31 sm:w-40 sm:h-40 rounded-xl overflow-hidden shadow-lg ring-1 ring-slate-200 transition-transform group-hover:scale-[1.02]">
                 <img 
                   src={song.coverUrl || 'https://via.placeholder.com/200'} 
                   alt={`${song.title} by ${song.artists.join('/')}`}
@@ -706,16 +755,20 @@ export const SongDetail: React.FC<SongDetailProps> = ({ songs, songId, onBack, o
                   loading="lazy"
                 />
               </div>
+              {/* 封面装饰光效 */}
+              <div className="absolute inset-0 rounded-xl bg-gradient-to-t from-black/10 to-transparent pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity" />
             </div>
-            <div className="text-left flex-1">
+            
+            {/* 歌曲信息 */}
+            <div className="text-left flex-1 min-w-0">
               {isEditing ? (
                 // 编辑模式
-                <div className="space-y-3">
+                <div className="space-y-3 w-full">
                   <input
                     type="text"
                     value={editedTitle}
                     onChange={(e) => setEditedTitle(e.target.value)}
-                    className="text-lg md:text-xl font-bold mb-1 text-gray-900 tracking-tight w-full border-b border-gray-300 focus:border-blue-500 focus:outline-none pb-1"
+                    className="text-xl font-bold text-slate-900 tracking-tight w-full border-b-2 border-slate-200 focus:border-violet-500 focus:outline-none pb-2 bg-transparent"
                   />
                   
                   <div className="space-y-2">
@@ -725,12 +778,12 @@ export const SongDetail: React.FC<SongDetailProps> = ({ songs, songId, onBack, o
                           type="text"
                           value={artist}
                           onChange={(e) => handleArtistChange(index, e.target.value)}
-                          className="text-base text-blue-600 mb-2 font-medium w-full border-b border-gray-300 focus:border-blue-500 focus:outline-none pb-1"
+                          className="text-base text-violet-600 font-medium w-full border-b border-slate-200 focus:border-violet-500 focus:outline-none pb-1 bg-transparent"
                         />
                         {editedArtists.length > 1 && (
                           <button
                             onClick={() => handleRemoveArtist(index)}
-                            className="text-red-500 hover:text-red-700"
+                            className="text-slate-400 hover:text-red-500 transition-colors"
                           >
                             ×
                           </button>
@@ -739,7 +792,7 @@ export const SongDetail: React.FC<SongDetailProps> = ({ songs, songId, onBack, o
                     ))}
                     <button
                       onClick={handleAddArtist}
-                      className="text-blue-500 hover:text-blue-700 text-sm"
+                      className="text-violet-500 hover:text-violet-700 text-sm font-medium"
                     >
                       + 添加艺术家
                     </button>
@@ -750,7 +803,7 @@ export const SongDetail: React.FC<SongDetailProps> = ({ songs, songId, onBack, o
                     value={editedAlbum}
                     onChange={(e) => setEditedAlbum(e.target.value)}
                     placeholder="专辑名称"
-                    className="text-xs text-gray-500 mb-1 w-full border-b border-gray-300 focus:border-blue-500 focus:outline-none pb-1"
+                    className="text-sm text-slate-500 w-full border-b border-slate-200 focus:border-violet-500 focus:outline-none pb-1 bg-transparent"
                   />
 
                   <input
@@ -758,7 +811,7 @@ export const SongDetail: React.FC<SongDetailProps> = ({ songs, songId, onBack, o
                     value={editedCoverUrl}
                     onChange={(e) => setEditedCoverUrl(e.target.value)}
                     placeholder="封面图片URL"
-                    className="text-xs text-gray-500 mb-1 w-full border-b border-gray-300 focus:border-blue-500 focus:outline-none pb-1"
+                    className="text-sm text-slate-500 w-full border-b border-slate-200 focus:border-violet-500 focus:outline-none pb-1 bg-transparent"
                   />
 
                   <input
@@ -766,21 +819,21 @@ export const SongDetail: React.FC<SongDetailProps> = ({ songs, songId, onBack, o
                     value={editedReleaseDate}
                     onChange={(e) => setEditedReleaseDate(e.target.value)}
                     placeholder="发行日期 (YYYY-MM-DD)"
-                    className="text-xs text-gray-500 mb-1 w-full border-b border-gray-300 focus:border-blue-500 focus:outline-none pb-1"
+                    className="text-sm text-slate-500 w-full border-b border-slate-200 focus:border-violet-500 focus:outline-none pb-1 bg-transparent"
                   />
                   
                   {/* 标签编辑 */}
-                  <div className="mt-2">
+                  <div className="mt-3 pt-3 border-t border-slate-100">
                     <div className="flex gap-2 flex-wrap mb-2">
                       {editedTags.map((tag, index) => {
                         const colors = getTagColor(index);
                         const borderColor = colors.text.replace('text-', 'border-');
                         return (
-                          <span key={index} className={`inline-flex items-center gap-1 px-2 py-1 ${colors.bg} ${colors.text} ${borderColor} border rounded-full text-xs`}>
+                          <span key={index} className={`inline-flex items-center gap-1 px-2.5 py-1 ${colors.bg} ${colors.text} ${borderColor} border rounded-full text-xs font-medium`}>
                             {tag}
                             <button
                               onClick={() => handleRemoveTag(tag)}
-                              className={`${colors.text} opacity-60 hover:opacity-100`}
+                              className={`${colors.text} opacity-60 hover:opacity-100 ml-0.5`}
                             >
                               ×
                             </button>
@@ -796,14 +849,14 @@ export const SongDetail: React.FC<SongDetailProps> = ({ songs, songId, onBack, o
                           onChange={(e) => setNewTag(e.target.value)}
                           onFocus={() => setShowTagsHistory(true)}
                           placeholder="添加记忆标签..."
-                          className="w-full text-xs px-2 py-1 bg-gray-100 border border-gray-200 rounded-full focus:border-amber-300 focus:outline-none"
+                          className="w-full text-xs px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:border-violet-300 focus:bg-white focus:ring-2 focus:ring-violet-100 focus:outline-none transition-all"
                         />
                         {/* 智能匹配标签下拉列表 */}
                         {showTagsHistory && getTagsFromSongs(songs).length > 0 && (
-                          <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-50 max-h-40 overflow-y-auto">
-                            <div className="sticky top-0 bg-gray-50 px-3 py-2 border-b border-gray-100 flex items-center gap-2">
-                              <Tag className="w-3 h-3 text-gray-400" />
-                              <span className="text-xs text-gray-500">已有标签</span>
+                          <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-xl z-50 max-h-40 overflow-y-auto">
+                            <div className="sticky top-0 bg-slate-50 px-4 py-2.5 border-b border-slate-100 flex items-center gap-2 rounded-t-xl">
+                              <Tag className="w-3.5 h-3.5 text-slate-400" />
+                              <span className="text-xs text-slate-500 font-medium">已有标签</span>
                             </div>
                             <div className="py-1">
                               {getTagsFromSongs(songs)
@@ -825,7 +878,7 @@ export const SongDetail: React.FC<SongDetailProps> = ({ songs, songId, onBack, o
                                       key={tagName}
                                       type="button"
                                       onClick={() => handleSelectFromMatchedTags(tagName)}
-                                      className={`w-full text-left px-3 py-2 text-xs hover:bg-gray-50 ${color.text}`}
+                                      className={`w-full text-left px-4 py-2.5 text-sm hover:bg-slate-50 ${color.text} transition-colors first:rounded-b-xl`}
                                     >
                                       {tagName}
                                     </button>
@@ -838,7 +891,7 @@ export const SongDetail: React.FC<SongDetailProps> = ({ songs, songId, onBack, o
                       <button
                         type="submit"
                         disabled={!newTag.trim()}
-                        className="px-3 py-1 bg-pink-500 text-white rounded-full text-xs hover:bg-pink-600 disabled:opacity-50"
+                        className="px-4 py-2 bg-violet-500 text-white rounded-lg text-xs font-medium hover:bg-violet-600 disabled:opacity-50 transition-colors"
                       >
                         添加
                       </button>
@@ -852,16 +905,16 @@ export const SongDetail: React.FC<SongDetailProps> = ({ songs, songId, onBack, o
                     )}
                   </div>
                   
-                  <div className="flex gap-2 mt-3">
+                  <div className="flex gap-2.5 mt-4 pt-3 border-t border-slate-100">
                     <button
                       onClick={handleSave}
-                      className="px-3 py-1 bg-blue-600 text-white rounded-full text-xs"
+                      className="px-5 py-2 bg-violet-600 text-white rounded-lg text-sm font-medium hover:bg-violet-700 transition-colors shadow-sm"
                     >
                       保存
                     </button>
                     <button
                       onClick={handleCancel}
-                      className="px-3 py-1 bg-gray-300 text-gray-700 rounded-full text-xs"
+                      className="px-5 py-2 bg-slate-100 text-slate-700 rounded-lg text-sm font-medium hover:bg-slate-200 transition-colors"
                     >
                       取消
                     </button>
@@ -869,70 +922,73 @@ export const SongDetail: React.FC<SongDetailProps> = ({ songs, songId, onBack, o
                 </div>
               ) : (
                 // 查看模式
-                <div>
+                <div className="space-y-1">
                   <div className="flex items-center gap-2">
-                    <h1 className="text-lg md:text-xl font-bold mb-1 text-gray-900 tracking-tight">{song.title}</h1>
+                    <h1 className="text-lg sm:text-xl font-bold text-slate-900 tracking-tight">{song.title}</h1>
                     <button
                       onClick={handleEdit}
-                      className="text-blue-500 hover:text-blue-700"
+                      className="p-1.5 text-slate-400 hover:text-violet-600 hover:bg-violet-50 rounded-lg transition-all"
+                      title="编辑歌曲信息"
                     >
-                      <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                      </svg>
+                      <Pencil size={16} />
                     </button>
                   </div>
                   
-                  <div className="text-base text-blue-600 mb-2 font-medium">
+                  <div className="text-sm sm:text-base text-violet-600 font-medium pl-0.5">
                     {song.artists.map((artist, index) => (
                       <React.Fragment key={artist}>
                         <span 
                           onClick={() => onArtistClick?.(artist)}
-                          className="cursor-pointer hover:underline hover:text-blue-700"
+                          className="cursor-pointer hover:underline hover:text-violet-700 transition-colors"
                           title={`查看 ${artist} 的详情`}
                         >
                           {artist}
                         </span>
-                        {index < song.artists.length - 1 && <span className="text-blue-600">/</span>}
+                        {index < song.artists.length - 1 && <span className="text-violet-300 mx-1">/</span>}
                       </React.Fragment>
                     ))}
                   </div>
                   
-                  {song.album && (
-                    <p className="text-xs text-gray-500 mb-1">
-                      专辑: 
-                      <span 
-                        onClick={() => onAlbumClick?.(song.album!)}
-                        className="text-gray-700 cursor-pointer hover:underline hover:text-gray-900"
-                        title={`查看专辑: ${song.album}`}
-                      >
-                        {song.album}
-                      </span>
-                    </p>
-                  )}
-                  
-                  {song.releaseDate && (() => {
-                    let releaseYear: number | null = null;
-                    if (typeof song.releaseDate === 'string' && !isNaN(Number(song.releaseDate))) {
-                      const year = Number(song.releaseDate);
-                      if (year >= 1900 && year <= 2100) {
-                        releaseYear = year;
-                      }
-                    } else {
-                      const date = new Date(song.releaseDate);
-                      if (!isNaN(date.getTime())) {
-                        releaseYear = date.getFullYear();
-                      }
-                    }
-                    return releaseYear !== null && (
-                      <p className="text-xs text-gray-500 mb-1">
-                        发行日期: <span className="text-gray-700">{releaseYear}</span>
+                  {/* 元信息 */}
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs sm:text-sm text-slate-500 pt-1">
+                    {song.album && (
+                      <p className="flex items-center gap-1.5">
+                        <Disc size={14} className="text-slate-400" />
+                        <span 
+                          onClick={() => onAlbumClick?.(song.album!)}
+                          className="cursor-pointer hover:text-slate-800 hover:underline transition-colors"
+                          title={`查看专辑: ${song.album}`}
+                        >
+                          {song.album}
+                        </span>
                       </p>
-                    );
-                  })()}
+                    )}
+                    
+                    {song.releaseDate && (() => {
+                      let releaseYear: number | null = null;
+                      if (typeof song.releaseDate === 'string' && !isNaN(Number(song.releaseDate))) {
+                        const year = Number(song.releaseDate);
+                        if (year >= 1900 && year <= 2100) {
+                          releaseYear = year;
+                        }
+                      } else {
+                        const date = new Date(song.releaseDate);
+                        if (!isNaN(date.getTime())) {
+                          releaseYear = date.getFullYear();
+                        }
+                      }
+                      return releaseYear !== null ? (
+                        <p className="flex items-center gap-1.5">
+                          <Calendar size={14} className="text-slate-400" />
+                          <span>{releaseYear}</span>
+                        </p>
+                      ) : null;
+                    })()}
+                  </div>
                   
                   {/* 标签显示 */}
                   {song.tags && song.tags.length > 0 && (
-                    <div className="flex gap-2 flex-wrap mt-2">
+                    <div className="flex gap-1.5 sm:gap-2 flex-wrap pt-1.5">
                       {song.tags.map((tag, index) => {
                         const colors = getTagColor(index);
                         const borderColor = colors.text.replace('text-', 'border-');
@@ -940,11 +996,9 @@ export const SongDetail: React.FC<SongDetailProps> = ({ songs, songId, onBack, o
                           <button
                             key={index}
                             onClick={() => onTagClick && onTagClick(tag)}
-                            className={`inline-flex items-center px-3 py-1 ${colors.bg} ${colors.text} ${borderColor} border rounded-full text-xs cursor-pointer hover:opacity-80 transition-opacity`}
+                            className={`inline-flex items-center px-2 sm:px-3 py-1 sm:py-1.5 ${colors.bg} ${colors.text} ${borderColor} border rounded-full text-[11px] sm:text-xs font-medium cursor-pointer hover:shadow-sm hover:opacity-80 transition-all`}
                           >
-                            <svg xmlns="http://www.w3.org/2000/svg" className={`w-3 h-3 mr-1 ${colors.text}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
-                            </svg>
+                            <Tag size={12} className="mr-1.5 opacity-70" />
                             {tag}
                           </button>
                         );
@@ -958,29 +1012,31 @@ export const SongDetail: React.FC<SongDetailProps> = ({ songs, songId, onBack, o
           </div>
         </section>
 
-        {/* 歌词区域 */}
-        <section className="bg-blue-50/20 rounded-xl p-3 shadow-md mb-4">
+        {/* 推荐歌词 / 收藏的歌词 */}
+        <section className="bg-white rounded-xl p-3 shadow-sm border border-slate-100 mb-4">
           <div className="flex justify-between items-center mb-3">
-            <h2 className="text-base font-semibold text-gray-800 flex items-center gap-2">
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-pink-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
-              </svg>
+            <h2 className="text-base font-semibold text-slate-800 flex items-center gap-2">
+              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-pink-100 to-rose-50 flex items-center justify-center">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-pink-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
+                </svg>
+              </div>
               {lyricsViewMode === 'saved' ? '我喜欢的歌词' : '推荐歌词'}
             </h2>
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-3">
               {lyricsViewMode === 'saved' && (
-                <span className="text-xs text-gray-500">{savedLyrics.length} 组</span>
+                <span className="text-xs text-slate-400 font-medium px-2 py-1 bg-slate-50 rounded-full">{savedLyrics.length} 组</span>
               )}
-              <div className="flex gap-2">
+              <div className="flex bg-slate-100 rounded-lg p-1">
                 <button 
                   onClick={() => setLyricsViewMode('saved')}
-                  className={`text-xs px-3 py-1 rounded-full transition-colors ${lyricsViewMode === 'saved' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}
+                  className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all ${lyricsViewMode === 'saved' ? 'bg-white text-violet-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
                 >
                   我的
                 </button>
                 <button 
                   onClick={() => setLyricsViewMode('recommended')}
-                  className={`text-xs px-3 py-1 rounded-full transition-colors ${lyricsViewMode === 'recommended' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}
+                  className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all ${lyricsViewMode === 'recommended' ? 'bg-white text-violet-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
                 >
                   推荐
                 </button>
@@ -991,44 +1047,43 @@ export const SongDetail: React.FC<SongDetailProps> = ({ songs, songId, onBack, o
           {/* 我喜欢的歌词 */}
           {lyricsViewMode === 'saved' && (
             savedLyrics.length > 0 ? (
-              <div className="space-y-4">
-                {/* 显示所有保存的歌词组 */}
-                <div className="space-y-4">
-                  {savedLyrics.map((lyricGroup, groupIndex) => (
-                    <div key={groupIndex} className="relative group">
-                      <p className="text-gray-700 bg-gray-50 p-3 rounded-xl transition-all duration-300 hover:shadow-md text-center text-sm">
-                        「{lyricGroup.join('，')}。」
-                      </p>
-                      <button 
-                        onClick={() => handleDeleteSavedLyricGroup(groupIndex)}
-                        className="absolute top-2 right-2 p-2 rounded-full bg-gray-100 text-gray-500 opacity-0 group-hover:opacity-100 transition-opacity hover:text-red-500"
-                        title="删除这个歌词组"
-                      >
-                        <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                        </svg>
-                      </button>
-                    </div>
-                  ))}
-                  {savedLyrics.length > 1 && (
+              <div className="space-y-3">
+                {savedLyrics.map((lyricGroup, groupIndex) => (
+                  <div key={groupIndex} className="relative group">
+                    <p className="text-slate-700 bg-gradient-to-r from-slate-50 to-transparent p-4 rounded-xl transition-all duration-300 hover:shadow-md hover:bg-slate-50 text-center text-sm leading-relaxed border border-slate-100">
+                      「{lyricGroup.join('，')}。」
+                    </p>
                     <button 
-                      onClick={handleDeleteAllLyrics}
-                      className="w-full mt-2 text-red-600 hover:text-red-700 text-center py-2 rounded-lg bg-red-50 hover:bg-red-100 transition-colors text-xs"
+                      onClick={() => handleDeleteSavedLyricGroup(groupIndex)}
+                      className="absolute top-2 right-2 p-1.5 rounded-full bg-white/80 backdrop-blur-sm text-slate-400 opacity-0 group-hover:opacity-100 transition-all hover:text-red-500 hover:bg-red-50 shadow-sm"
+                      title="删除这个歌词组"
                     >
-                      删除所有歌词组
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                      </svg>
                     </button>
-                  )}
-                </div>
+                  </div>
+                ))}
+                {savedLyrics.length > 1 && (
+                  <button 
+                    onClick={handleDeleteAllLyrics}
+                    className="w-full mt-4 py-2.5 text-red-600 hover:text-red-700 text-center text-sm font-medium rounded-xl bg-red-50/80 hover:bg-red-100/80 transition-all"
+                  >
+                    删除所有歌词组
+                  </button>
+                )}
               </div>
             ) : (
-              <div className="flex flex-col items-center justify-center text-center text-gray-500 py-10 gap-3">
-                <div className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center mb-2">
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
+              <div className="flex flex-col items-center justify-center text-center text-slate-400 py-8 gap-3">
+                <div className="w-12 h-12 rounded-full bg-slate-50 flex items-center justify-center">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-slate-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
                   </svg>
                 </div>
-                <h3 className="text-sm font-medium text-gray-600">还没有保存喜欢的歌词</h3>
-                <p className="text-xs">选择歌词后点击"收藏"按钮，将喜欢的歌词收藏起来</p>
+                <div>
+                  <h3 className="text-sm font-medium text-slate-500">还没有保存喜欢的歌词</h3>
+                  <p className="text-xs mt-1 text-slate-400">选择歌词后点击"收藏"，将喜欢的句子收藏起来</p>
+                </div>
               </div>
             )
           )}
@@ -1038,36 +1093,41 @@ export const SongDetail: React.FC<SongDetailProps> = ({ songs, songId, onBack, o
             <>
               {recommendedLyrics.length > 0 ? (
                 <div className="space-y-4">
-                  <div className="space-y-4">
+                  <div className="space-y-3">
                     {recommendedLyrics.map((lyricGroup, groupIndex) => (
-                      <div key={groupIndex} className="relative group">
-                        <p className="text-gray-700 bg-gray-50 p-3 rounded-xl transition-all duration-300 hover:shadow-md text-center text-sm">
+                      <div key={groupIndex}>
+                        <p className="text-slate-700 bg-gradient-to-r from-violet-50/50 to-transparent p-4 rounded-xl transition-all duration-300 hover:shadow-md hover:from-violet-50 text-center text-sm leading-relaxed border border-violet-100/50">
                           「{lyricGroup.join('，')}。」
                         </p>
                       </div>
                     ))}
                   </div>
-                  <div className="text-center">
+                  <div className="text-center pt-2">
                     <button 
                       onClick={() => {
                         const newRecommended = generateRecommendedLyrics(lyrics);
                         setRecommendedLyrics(newRecommended);
                       }}
-                      className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-full text-xs transition-colors"
+                      className="px-5 py-2.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-sm font-medium transition-all shadow-sm hover:shadow-md inline-flex items-center gap-2"
                     >
-                      重新推荐
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                      </svg>
+                      换一批推荐
                     </button>
                   </div>
                 </div>
               ) : (
-                <div className="flex flex-col items-center justify-center text-center text-gray-500 py-10 gap-3">
-                  <div className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center mb-2">
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                <div className="flex flex-col items-center justify-center text-center text-slate-400 py-8 gap-3">
+                  <div className="w-12 h-12 rounded-full bg-slate-50 flex items-center justify-center">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-slate-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
                     </svg>
                   </div>
-                  <h3 className="text-sm font-medium text-gray-600">暂无推荐歌词</h3>
-                  <p className="text-xs">歌曲歌词太少，无法生成推荐</p>
+                  <div>
+                    <h3 className="text-sm font-medium text-slate-500">暂无推荐歌词</h3>
+                    <p className="text-xs mt-1 text-slate-400">当前歌曲歌词较少，无法生成推荐</p>
+                  </div>
                 </div>
               )}
             </>
@@ -1075,12 +1135,14 @@ export const SongDetail: React.FC<SongDetailProps> = ({ songs, songId, onBack, o
         </section>
 
         {/* 歌词展示区域 */}
-        <section className="bg-blue-50/20 rounded-xl p-3 shadow-md transform hover:shadow-lg transition-shadow duration-300 min-h-[300px] mb-4">
+        <section className="bg-white rounded-xl p-3 shadow-sm border border-slate-100 mb-4">
           <div className="flex justify-between items-center mb-3">
-            <h2 className="text-base font-semibold text-gray-800 flex items-center gap-2">
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2M9 19c0-1.105 1.343-2 3-2s3 .895 3 2M9 19v-3m0 3V5m0 14c0 1.105-1.343 2-3 2s-3-.895-3-2m3 0c0-1.105 1.343-2 3-2s3 .895 3 2m0 0v-3m0 3" />
-              </svg>
+            <h2 className="text-base font-semibold text-slate-800 flex items-center gap-2">
+              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-100 to-indigo-50 flex items-center justify-center">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2M9 19c0-1.105 1.343-2 3-2s3 .895 3 2M9 19v-3m0 3V5m0 14c0 1.105-1.343 2-3 2s-3-.895-3-2m3 0c0-1.105 1.343-2 3-2s3 .895 3 2m0 0v-3m0 3" />
+                </svg>
+              </div>
               歌词
             </h2>
             <div className="flex items-center gap-2">
@@ -1088,13 +1150,13 @@ export const SongDetail: React.FC<SongDetailProps> = ({ songs, songId, onBack, o
                 <>
                   <button
                     onClick={handleClearSelection}
-                    className="px-3 py-1.5 bg-gray-500 hover:bg-gray-600 text-white rounded-full transition-colors font-medium text-xs flex items-center"
+                    className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-lg transition-all font-medium text-xs flex items-center"
                   >
                     清除
                   </button>
                   <button
                     onClick={handleSaveLyrics}
-                    className="px-3 py-1.5 bg-pink-600 hover:bg-pink-700 text-white rounded-full transition-colors font-medium text-xs flex items-center"
+                    className="px-3 py-1.5 bg-pink-500 hover:bg-pink-600 text-white rounded-lg transition-all shadow-sm hover:shadow-md font-medium text-xs"
                   >
                     收藏
                   </button>
@@ -1102,31 +1164,39 @@ export const SongDetail: React.FC<SongDetailProps> = ({ songs, songId, onBack, o
               )}
               <button
                 onClick={() => setShowLyricsEditor(true)}
-                className="px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white rounded-full transition-colors font-medium text-xs flex items-center"
+                className="p-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-600 rounded-lg transition-colors"
+                title="编辑歌词"
               >
-                <Pencil size={14} />
+                <Pencil size={15} />
               </button>
               <button 
                 onClick={handleSearchLyrics}
                 disabled={buttonLoading}
-                className="px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white rounded-full transition-colors font-medium text-xs flex items-center"
+                className="p-2 bg-violet-50 hover:bg-violet-100 text-violet-600 rounded-lg transition-colors disabled:opacity-50"
+                title="搜索歌词"
               >
-                <Search size={14} />
+                <Search size={15} />
               </button>
             </div>
           </div>
           
           {loading ? (
-            <div className="flex flex-col justify-center items-center h-32 gap-4">
-              <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-blue-500"></div>
-              <p className="text-gray-500 text-sm">正在获取歌词...</p>
+            <div className="flex flex-col justify-center items-center h-40 gap-4">
+              <div className="relative">
+                <div className="w-10 h-10 border-2 border-slate-200 border-t-violet-500 rounded-full animate-spin"></div>
+              </div>
+              <p className="text-slate-400 text-sm">正在获取歌词...</p>
             </div>
           ) : lyrics.length > 0 ? (
-            <div className="space-y-4">
+            <div className="space-y-1 max-h-[400px] overflow-y-auto pr-2 [&::-webkit-scrollbar]:hidden [&::-webkit-scrollbar-track]:bg-transparent [&::-ms-overflow-style]:none [scrollbar-width:none]">
               {lyrics.map((line, index) => (
                   <p 
                     key={index} 
-                    className={`text-center py-2 px-4 text-sm cursor-pointer transition-all rounded-lg ${selectedLyrics.includes(line) ? 'bg-pink-100 text-pink-800' : 'text-gray-700 hover:bg-blue-50'}`}
+                    className={`py-2.5 px-4 text-sm cursor-pointer transition-all duration-200 rounded-lg text-center leading-relaxed ${
+                      selectedLyrics.includes(line)
+                        ? 'bg-pink-50 text-pink-700 font-medium scale-[1.01]'
+                        : 'text-slate-700 hover:bg-slate-50'
+                    }`}
                     onClick={() => {
                       setSelectedLyrics(prev => {
                         if (prev.includes(line)) {
@@ -1142,14 +1212,16 @@ export const SongDetail: React.FC<SongDetailProps> = ({ songs, songId, onBack, o
               ))}
             </div>
           ) : (
-            <div className="flex flex-col items-center justify-center text-center text-gray-500 py-10 gap-4">
-              <div className="w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center mb-2">
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2M9 19c0-1.105 1.343-2 3-2s3 .895 3 2M9 19v-3m0 3V5m0 14c0 1.105-1.343 2-3 2s-3-.895-3-2m3 0c0-1.105 1.343-2 3-2s3 .895 3 2m0 0v-3m0 3" />
+            <div className="flex flex-col items-center justify-center text-center text-slate-400 py-14 gap-4">
+              <div className="w-16 h-16 rounded-full bg-slate-50 flex items-center justify-center">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-slate-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2M9 19c0-1.105 1.343-2 3-2s3 .895 3 2M9 19v-3m0 3V5m0 14c0 1.105-1.343 2-3 2s-3-.895-3-2m3 0c0-1.105 1.343-2 3-2s3 .895 3 2m0 0v-3m0 3" />
                 </svg>
               </div>
-              <h3 className="text-base font-medium text-gray-600">暂无歌词</h3>
-              <p className="text-sm">点击右上角的获取歌词按钮获取歌词</p>
+              <div>
+                <h3 className="text-base font-medium text-slate-500">暂无歌词</h3>
+                <p className="text-sm mt-1 text-slate-400">点击右上角按钮搜索或编辑歌词</p>
+              </div>
             </div>
           )}
         </section>
@@ -1159,16 +1231,18 @@ export const SongDetail: React.FC<SongDetailProps> = ({ songs, songId, onBack, o
 
         {/* 搜索歌词模态框 */}
         {showSearchModal && (
-          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 animate-fade-in">
-            <div className="bg-white rounded-xl p-6 max-w-md w-full mx-4 max-h-[80vh] overflow-auto animate-slide-up shadow-xl">
-              <div className="flex justify-between items-center mb-6">
-                <h3 className="text-xl font-semibold text-gray-900 flex items-center gap-2">
-                  <Search size={20} className="text-purple-500" />
+          <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 animate-fade-in p-4">
+            <div className="bg-white rounded-2xl p-6 max-w-md w-full max-h-[80vh] overflow-auto animate-slide-up shadow-2xl border border-slate-100">
+              <div className="flex justify-between items-center mb-5">
+                <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-violet-100 to-purple-50 flex items-center justify-center">
+                    <Search size={16} className="text-violet-500" />
+                  </div>
                   搜索歌词
                 </h3>
                 <button 
                   onClick={() => setShowSearchModal(false)}
-                  className="text-gray-500 hover:text-gray-700 transition-colors p-2 rounded-full hover:bg-gray-100"
+                  className="text-slate-400 hover:text-slate-600 transition-colors p-2 rounded-lg hover:bg-slate-100"
                 >
                   <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -1176,40 +1250,47 @@ export const SongDetail: React.FC<SongDetailProps> = ({ songs, songId, onBack, o
                 </button>
               </div>
               
-              <div className="mb-4">
-                <p className="text-sm text-gray-600 mb-2">
-                  搜索歌曲: <span className="font-medium">{song?.title}</span>
+              <div className="mb-5 p-3 bg-slate-50 rounded-xl">
+                <p className="text-sm text-slate-600">
+                  正在搜索: <span className="font-semibold text-slate-900">{song?.title}</span>
                 </p>
               </div>
               
               {searchLoading ? (
-                <div className="flex flex-col justify-center items-center py-10 gap-4">
-                  <div className="animate-spin h-8 w-8 border-2 border-purple-500 border-opacity-20 border-t-purple-500 rounded-full"></div>
-                  <p className="text-gray-500 text-sm">正在搜索歌词...</p>
+                <div className="flex flex-col justify-center items-center py-14 gap-4">
+                  <div className="relative w-10 h-10">
+                    <div className="absolute inset-0 border-2 border-slate-200 border-t-violet-500 rounded-full animate-spin"></div>
+                  </div>
+                  <p className="text-slate-400 text-sm font-medium">正在搜索歌词...</p>
                 </div>
               ) : searchResults.length > 0 ? (
-                <div className="space-y-3">
+                <div className="space-y-2.5 max-h-[40vh] overflow-y-auto pr-1 custom-scrollbar">
                   {searchResults.map((result, index) => (
                     <div 
                       key={index} 
-                      className="p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors cursor-pointer border border-gray-200"
+                      className="p-4 bg-slate-50/80 rounded-xl hover:bg-violet-50 transition-all cursor-pointer border border-transparent hover:border-violet-200 group"
                       onClick={() => handleSelectLyrics(result)}
                     >
-                      <div className="font-medium text-gray-900 mb-1">{result.name || result.title}</div>
-                      <div className="text-sm text-gray-600 mb-2">{result.artistName || result.artist}</div>
+                      <div className="font-semibold text-slate-900 mb-1 group-hover:text-violet-700 transition-colors">{result.name || result.title}</div>
+                      <div className="text-sm text-slate-600 mb-0.5">{result.artistName || result.artist}</div>
                       {result.albumName && (
-                        <div className="text-xs text-gray-500">{result.albumName}</div>
+                        <div className="text-xs text-slate-400 flex items-center gap-1">
+                          <Disc size={11} />
+                          {result.albumName}
+                        </div>
                       )}
                     </div>
                   ))}
                 </div>
               ) : (
-                <div className="flex flex-col items-center justify-center text-center text-gray-500 py-10 gap-4">
-                  <div className="w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center mb-2">
-                    <Search size={24} className="text-gray-400" />
+                <div className="flex flex-col items-center justify-center text-center text-slate-400 py-14 gap-4">
+                  <div className="w-14 h-14 rounded-full bg-slate-50 flex items-center justify-center">
+                    <Search size={22} className="text-slate-300" />
                   </div>
-                  <h3 className="text-base font-medium text-gray-600">未找到歌词</h3>
-                  <p className="text-sm">尝试使用不同的歌曲标题或手动添加歌词</p>
+                  <div>
+                    <h3 className="text-sm font-medium text-slate-500">未找到歌词</h3>
+                    <p className="text-xs mt-1 text-slate-400">尝试手动添加歌词或稍后再试</p>
+                  </div>
                 </div>
               )}
             </div>
@@ -1218,18 +1299,18 @@ export const SongDetail: React.FC<SongDetailProps> = ({ songs, songId, onBack, o
 
         {/* 分享海报模态框 */}
         {showShareModal && (
-          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 animate-fade-in">
-            <div className="bg-white rounded-xl p-6 max-w-2xl w-full mx-4 max-h-[90vh] overflow-auto animate-slide-up shadow-xl">
-              <div className="flex justify-between items-center mb-6">
-                <h3 className="text-xl font-semibold text-gray-900 flex items-center gap-2">
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
-                  </svg>
+          <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 animate-fade-in p-4">
+            <div className="bg-white rounded-2xl p-6 max-w-xl w-full max-h-[90vh] overflow-auto animate-slide-up shadow-2xl border border-slate-100">
+              <div className="flex justify-between items-center mb-5">
+                <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-100 to-indigo-50 flex items-center justify-center">
+                    <Share2 size={16} className="text-blue-500" />
+                  </div>
                   分享海报
                 </h3>
                 <button 
                   onClick={() => setShowShareModal(false)}
-                  className="text-gray-500 hover:text-gray-700 transition-colors p-2 rounded-full hover:bg-gray-100"
+                  className="text-slate-400 hover:text-slate-600 transition-colors p-2 rounded-lg hover:bg-slate-100"
                 >
                   <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -1237,57 +1318,55 @@ export const SongDetail: React.FC<SongDetailProps> = ({ songs, songId, onBack, o
                 </button>
               </div>
               
-              <div className="flex flex-col md:flex-row gap-6 items-center">
+              <div className="flex flex-col md:flex-row gap-8 items-center md:items-start">
                 {/* 海报预览区域 - 3:4比例 */}
-                <div className="aspect-[3/4] w-full md:w-[240px] bg-gradient-to-br from-gray-50 to-gray-100 rounded-xl overflow-hidden relative shadow-xl border border-gray-200">
+                <div ref={posterRef} className="aspect-[3/4] w-full md:w-[220px] bg-gradient-to-br from-violet-50 via-white to-pink-50 rounded-2xl overflow-hidden relative shadow-lg border border-slate-200 shrink-0">
                   {/* 顶部装饰 */}
-                  <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-blue-400 via-purple-400 to-pink-400"></div>
+                  <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-violet-400 via-pink-400 to-blue-400"></div>
                   
                   {/* 歌词卡片内容 */}
-                  <div className="absolute inset-0 p-6 flex flex-col">
+                  <div className="absolute inset-0 p-5 flex flex-col">
                     {/* 卡片容器 */}
                     <div className="flex-1 flex flex-col justify-between">
                       {/* 歌曲封面 - 确保完整显示 */}
                       {song?.coverUrl ? (
-                        <div className="w-32 h-32 rounded-lg overflow-hidden mb-3 shadow-md self-center border-2 border-gray-200 bg-white">
-                          <img src={song.coverUrl} alt={song.title} className="w-full h-full object-cover" />
+                        <div className="w-28 h-28 rounded-xl overflow-hidden shadow-md self-center border-2 border-white bg-white ring-1 ring-slate-200">
+                          <img src={song.coverUrl} alt={song.title} className="w-full h-full object-cover" crossOrigin="anonymous" />
                         </div>
                       ) : (
-                        <div className="w-32 h-32 rounded-lg bg-gray-200 flex items-center justify-center mb-3 shadow-md self-center border-2 border-gray-200">
-                          <svg xmlns="http://www.w3.org/2000/svg" className="h-12 w-12 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15.414a5 5 0 000-7.072m-2.828 9.9a9 9 0 010-12.728" />
+                        <div className="w-28 h-28 rounded-xl bg-gradient-to-br from-slate-100 to-slate-200 flex items-center justify-center shadow-md self-center border-2 border-white ring-1 ring-slate-200">
+                          <svg xmlns="http://www.w3.org/2000/svg" className="h-10 w-10 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15.414a5 5 0 000-7.072m-2.828 9.9a9 9 0 010-12.728" />
                           </svg>
                         </div>
                       )}
-                       
-                      {/* 歌曲信息 - 调整字体大小 */}
-                      <div className="text-gray-900 text-base font-medium mb-0.5 text-center truncate">{song?.title}</div>
-                      <div className="text-gray-600 text-xs mb-0.5 text-center truncate">{song?.artists?.join('/')}</div>
-                      {song?.album && <div className="text-gray-500 text-xs mb-2 text-center truncate">{song?.album}</div>}
+                        
+                      {/* 歌曲信息 */}
+                      <div className="text-slate-900 text-base font-semibold mt-3 text-center truncate px-1">{song?.title}</div>
+                      <div className="text-slate-500 text-xs mt-0.5 text-center truncate">{song?.artists?.join('/')}</div>
+                      {song?.album && <div className="text-slate-400 text-xs mt-0.5 text-center truncate">{song?.album}</div>}
                       
                       {/* 歌词卡片 */}
-                      <div className="bg-white rounded-lg p-4 shadow-sm border border-gray-100">
+                      <div className="bg-white rounded-xl p-4 shadow-sm border border-slate-100 mt-2">
                         {/* 选中的歌词 */}
                         {selectedLyrics.length > 0 ? (
                           <div className="leading-relaxed">
                             {selectedLyrics.length <= 3 ? (
-                              // 合并2-3句歌词为一句话并添加引号
-                              <div className="text-xs text-gray-700 italic text-center">
+                              <div className="text-xs text-slate-600 italic text-center font-medium">
                                 「{selectedLyrics.join('，')}。」
                               </div>
                             ) : (
-                              // 超过3句仍分开显示
                               selectedLyrics.map((line, index) => (
-                                <div key={index} className="mb-0.5 text-xs text-gray-700 text-center last:mb-0">{line}</div>
+                                <div key={index} className="mb-0.5 text-xs text-slate-600 text-center last:mb-0">{line}</div>
                               ))
                             )}
                           </div>
                         ) : (
-                          <div className="flex flex-col items-center">
-                            <div className="text-gray-500 text-xs text-center py-2">
+                          <div className="flex flex-col items-center py-1">
+                            <div className="text-slate-400 text-xs text-center">
                               分享这首好听的歌曲
                             </div>
-                            <div className="text-sm text-gray-500 truncate max-w-full">
+                            <div className="text-sm text-slate-500 truncate max-w-full mt-1 font-medium">
                               {song?.title} - {song?.artists?.join('/')}
                             </div>
                           </div>
@@ -1296,25 +1375,23 @@ export const SongDetail: React.FC<SongDetailProps> = ({ songs, songId, onBack, o
                     </div>
                     
                     {/* 底部装饰 */}
-                    <div className="mt-4 text-center">
-                      <div className="text-gray-400 text-xs">MelodyLog</div>
+                    <div className="mt-3 pt-2 border-t border-slate-100 text-center">
+                      <div className="text-slate-300 text-[10px] tracking-widest uppercase">MelodyLog</div>
                     </div>
                   </div>
                 </div>
                 
                 {/* 海报操作区域 */}
-                <div className="flex-1 space-y-6">
-                  <div className="space-y-3">
-                    <h4 className="text-lg font-medium text-gray-800">分享选项</h4>
-                    <p className="text-gray-500 text-sm">您可以下载海报或复制链接分享给朋友</p>
+                <div className="flex-1 space-y-5 w-full">
+                  <div className="space-y-2">
+                    <h4 className="text-base font-semibold text-slate-800">分享选项</h4>
+                    <p className="text-sm text-slate-500 leading-relaxed">将这首歌分享给好友，或下载精美海报保存</p>
                   </div>
                   
-                  <div className="space-y-3">
+                  <div className="space-y-2.5">
                     <button 
                       onClick={() => {
                         try {
-                          console.log('直接分享按钮点击，song数据:', song);
-                          // 使用Web Share API实现直接分享功能
                           if (navigator.share) {
                             navigator.share({
                               title: `分享歌曲: ${song?.title || '未知歌曲'}`,
@@ -1324,30 +1401,25 @@ export const SongDetail: React.FC<SongDetailProps> = ({ songs, songId, onBack, o
                               url: window.location.href
                             }).catch(err => {
                               console.error('Web Share API分享失败:', err);
-                              // 不自动回退到下载，让用户自己选择
                               showToast('分享失败，请尝试下载海报或复制链接。', 'warning');
                             });
                           } else {
-                            console.log('浏览器不支持Web Share API');
-                            // 如果浏览器不支持分享API，提示用户
-                            showToast('您的浏览器不支持直接分享功能，请尝试下载海报或复制链接。', 'info');
+                            showToast('您的浏览器不支持直接分享功能，请尝试下载海报。', 'info');
                           }
                         } catch (err) {
                           console.error('分享功能执行错误:', err);
                           showToast('分享时发生错误，请稍后再试。', 'error');
                         }
                       }}
-                      className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors flex items-center justify-center gap-2 cursor-pointer"
+                      className="w-full py-3 bg-gradient-to-r from-violet-500 to-indigo-500 hover:from-violet-600 hover:to-indigo-600 text-white rounded-xl font-medium transition-all shadow-sm hover:shadow-md flex items-center justify-center gap-2 cursor-pointer"
                     >
-                      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
-                      </svg>
+                      <Share2 size={18} />
                       直接分享
                     </button>
                     
                     <button 
                       onClick={handleDownloadPoster}
-                      className="w-full py-3 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg font-medium transition-colors flex items-center justify-center gap-2 cursor-pointer"
+                      className="w-full py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-medium transition-all flex items-center justify-center gap-2 cursor-pointer"
                     >
                       <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
@@ -1356,14 +1428,12 @@ export const SongDetail: React.FC<SongDetailProps> = ({ songs, songId, onBack, o
                     </button>
                   </div>
                   
-                  <div className="flex gap-3 mt-4">
-                    <button 
-                      onClick={() => setShowShareModal(false)}
-                      className="flex-1 py-3 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg font-medium transition-colors"
-                    >
-                      取消
-                    </button>
-                  </div>
+                  <button 
+                    onClick={() => setShowShareModal(false)}
+                    className="w-full py-2.5 text-slate-500 hover:text-slate-700 text-sm font-medium transition-colors"
+                  >
+                    取消
+                  </button>
                 </div>
               </div>
             </div>
