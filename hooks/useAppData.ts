@@ -4,7 +4,7 @@ import { setCache, getCache } from '../utils/cacheUtils';
 import { getAllSongs, addSong, addSongs, updateSong, deleteSong } from '../services/supabaseService';
 import { getCurrentUser, signOut, onAuthStateChange } from '../services/authService';
 import { User as AuthUser } from '../services/authService';
-import { fetchLyrics } from '../services/lyricsService';
+import { fetchLyrics, fetchLyricsAndSave } from '../services/lyricsService';
 import { musicApi } from '../services/musicApiAdapter';
 import { useToast } from '../components/Toast';
 
@@ -180,12 +180,10 @@ export const useAppData = () => {
     try {
       const addedSong = await addSong(newSong);
       
-      try {
-        const artist = addedSong.artists[0];
-        await fetchLyrics(addedSong.id, addedSong.title, artist);
-      } catch (error) {
+      // 后台自动获取歌词（不阻塞用户操作）
+      fetchLyricsAndSave(addedSong.id, addedSong.title, addedSong.artists[0]).catch(error => {
         console.warn('歌词自动获取失败:', error);
-      }
+      });
       
       setSongs(prevSongs => {
         const updatedSongs = [addedSong, ...prevSongs];
@@ -338,7 +336,8 @@ export const useAppData = () => {
           const tasks = addedSongs.map(song => async () => {
             try {
               const artist = song.artists[0];
-              await fetchLyrics(song.id, song.title, artist);
+              // 批量导入时自动获取歌词并保存到 Supabase
+              await fetchLyricsAndSave(song.id, song.title, artist);
             } catch (error) {
               console.warn('歌词自动获取失败:', song.title, error);
             }

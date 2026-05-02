@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
-import { Client } from 'lrclib-api';
+import { getLyrics as getLyricsFromLib, parseLyrics as parseLyricsFromLib } from 'lyrics-lib';
 import * as OpenCC from 'opencc-js';
 import API_CONFIG from './apiConfig';
 
@@ -7,8 +7,23 @@ const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
 const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
 const supabase = createClient(supabaseUrl, supabaseKey);
 
-const lrclibClient = new Client();
 let converter: ReturnType<typeof OpenCC.Converter> | null = null;
+
+// ============================================================
+// 统一歌词获取策略：
+//
+// 1. 添加/导入歌曲时 → fetchLyricsAndSave() 
+//    调用 lyrics-lib 获取歌词 + 保存到 Supabase（后台静默）
+//
+// 2. 进入详情页时 → fetchLyrics()
+//    只从 Supabase/缓存读取，不自动搜索 API
+//    （没歌词就显示空状态，用户手动点击"搜索歌曲"）
+//
+// 3. 手动搜索时 → searchLyricsByTitle()
+//    搜索多个候选结果供用户选择
+//
+// 4. 编辑保存/自定义歌词后 → fetchLyrics() 或直接更新状态
+// ============================================================
 
 const getConverter = () => {
   if (!converter) {
@@ -24,7 +39,7 @@ interface LyricsData {
   artist_name?: string;
   plain_lyrics: string;
   synced_lyrics?: string;
-  source?: 'manual' | 'lrclib' | 'import';
+  source?: 'manual' | 'lrclib' | 'lyrics-lib' | 'import';
   user_id?: string;
   created_at?: string;
   updated_at?: string;
@@ -45,7 +60,7 @@ interface LyricsCacheData {
 const memoryCache: LyricsCache = {};
 const CACHE_DURATION = 24 * 60 * 60 * 1000;
 
-const getLyricsFromCache = (key: string, _type: 'plain' | 'synced'): string[] | Array<{ time: string; text: string }> | null => {
+const getLyricsFromCache = (key: string, type: 'plain' | 'synced'): string[] | Array<{ time: string; text: string }> | null => {
   if (memoryCache[key]) {
     const now = Date.now();
     if (now - memoryCache[key].timestamp < CACHE_DURATION) {
@@ -73,7 +88,7 @@ const getLyricsFromCache = (key: string, _type: 'plain' | 'synced'): string[] | 
   return null;
 };
 
-const saveLyricsToCache = (key: string, _type: 'plain' | 'synced', data: string[] | Array<{ time: string; text: string }>): void => {
+const saveLyricsToCache = (key: string, type: 'plain' | 'synced', data: string[] | Array<{ time: string; text: string }>): void => {
   const timestamp = Date.now();
   memoryCache[key] = { data, timestamp };
 
@@ -85,7 +100,7 @@ const saveLyricsToCache = (key: string, _type: 'plain' | 'synced', data: string[
   }
 };
 
-const convertToSimplified = (text: string): string => {
+export const convertToSimplified = (text: string): string => {
   if (!text) return text;
   try {
     return getConverter()(text);
@@ -139,6 +154,10 @@ export const getUserId = async (): Promise<string | null> => {
   }
 };
 
+// ============================================================
+// Supabase 数据库操作
+// ============================================================
+
 export const fetchLyricsFromSupabase = async (songId: string): Promise<LyricsData | null> => {
   try {
     console.log(`[Supabase] 从songs表获取歌词: ${songId}`);
@@ -158,7 +177,7 @@ export const fetchLyricsFromSupabase = async (songId: string): Promise<LyricsDat
       console.log('[Supabase] 歌词获取成功');
       return {
         song_id: songId,
-        song_title: '', // 从数据库获取时可能没有song_title，设置为空字符串
+        song_title: '',
         plain_lyrics: data.user_lyrics,
         source: data.lyrics_source
       };
@@ -175,12 +194,12 @@ export const fetchLyricsFromSupabase = async (songId: string): Promise<LyricsDat
 export const saveLyricsToSupabase = async (
   songId: string,
   songTitle: string,
-  _artistName: string | undefined, // 未使用的参数，添加下划线前缀
+  _artistName: string | undefined,
   plainLyrics: string,
-  source: 'manual' | 'lrclib' | 'import' = 'manual'
+  source: 'manual' | 'lrclib' | 'lyrics-lib' | 'import' = 'manual'
 ): Promise<boolean> => {
   try {
-    console.log(`[Supabase] 保存歌词到songs表: ${songTitle}, songId: ${songId}, source: ${source}`);
+    console.log(`[Supabase] 保存歌词到songs表: ${songTitle}, source: ${source}`);
     console.log(`[Supabase] 歌词内容长度: ${plainLyrics.length} 字符`);
 
     // 先检查歌曲是否存在
@@ -272,6 +291,141 @@ export const getAllUserLyrics = async (): Promise<LyricsData[]> => {
   }
 };
 
+// ============================================================
+// 核心歌词获取函数（使用 lyrics-lib）
+// ============================================================
+
+/**
+ * 使用 lyrics-lib 从 API 获取纯文本歌词
+ * @returns 歌词文本或 null（如果未找到）
+ */
+const fetchFromAPI = async (
+  title: string,
+  artist?: string
+): Promise<string | null> => {
+  try {
+    const simplifiedTitle = convertToSimplified(title);
+    const simplifiedArtist = artist ? convertToSimplified(artist) : undefined;
+
+    console.log(`[lyrics-lib] 获取歌词: ${simplifiedTitle}${simplifiedArtist ? ` - ${simplifiedArtist}` : ''}`);
+
+    const lyrics = await getLyricsFromLib({
+      title: simplifiedTitle,
+      artist: simplifiedArtist
+    });
+
+    if (lyrics) {
+      console.log(`[lyrics-lib] 成功获取歌词 (${lyrics.length} 字符)`);
+      return lyrics;
+    }
+
+    console.log('[lyrics-lib] 未找到歌词');
+    return null;
+  } catch (error) {
+    console.log(`[lyrics-lib] 获取失败: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    return null;
+  }
+};
+
+/**
+ * 📥 添加/导入歌曲时调用：获取歌词并保存到 Supabase
+ *
+ * 使用场景：
+ * - useAppData.handleAddSong() 添加单首歌曲后
+ * - useAppData.handleBulkImport() 批量导入歌曲后
+ *
+ * 特点：
+ * - 后台静默执行，失败不阻断主流程
+ * - 自动将歌词保存到 Supabase 缓存
+ */
+export const fetchLyricsAndSave = async (
+  songId: string,
+  songTitle: string,
+  artist?: string
+): Promise<boolean> => {
+  try {
+    console.log(`[自动获取歌词] 开始: ${songTitle}${artist ? ` - ${artist}` : ''}`);
+
+    // 调用 API 获取歌词（使用歌曲名模糊搜索，不指定艺术家以提高匹配率）
+    const lyricsText = await fetchFromAPI(songTitle);
+
+    if (lyricsText) {
+      // 解析歌词文本
+      const parsed = parseLyricsFromLib(lyricsText);
+      const lines = (parsed.synced || parsed.unsynced).map(item =>
+        convertToSimplified(item.text)
+      ).filter(text => text.length > 0);
+
+      if (lines.length > 0 && lines[0] !== '暂无歌词') {
+        // 保存到 Supabase
+        const success = await saveLyricsToSupabase(
+          songId,
+          songTitle,
+          artist,
+          lines.join('\n'),
+          'lyrics-lib'
+        );
+
+        // 同时更新内存和本地缓存
+        const cacheKey = `${songId}_${songTitle.trim().toLowerCase()}_${artist || ''}`;
+        saveLyricsToCache(cacheKey, 'plain', lines);
+
+        console.log(`[自动获取歌词] ✅ 成功保存到 Supabase (${lines.length} 行)`);
+        return true;
+      }
+    }
+
+    console.log('[自动获取歌词] ⚠️ 未找到有效歌词');
+    return false;
+  } catch (error) {
+    console.error('[自动获取歌词] ❌ 失败:', error);
+    return false;
+  }
+};
+
+/**
+ * 📱 进入详情页时调用：只从 Supabase/缓存读取歌词
+ *
+ * 使用场景：
+ * - SongDetail useEffect([songId]) 进入详情页时
+ * - 编辑保存/自定义歌词保存后刷新显示
+ *
+ * 特点：
+ * - 纯读取函数，不搜索外部 API
+ * - 如果 Supabase 没有歌词，返回空数组（让 UI 显示"点击搜索"提示）
+ */
+export const fetchLyrics = async (
+  songId: string,
+  songTitle: string,
+  artist?: string
+): Promise<string[]> => {
+  const cacheKey = `${songId}_${songTitle.trim().toLowerCase()}_${artist || ''}`;
+
+  // 1. 优先从 Supabase 获取歌词（最新数据）
+  const supabaseLyrics = await fetchLyricsFromSupabase(songId);
+  if (supabaseLyrics && supabaseLyrics.plain_lyrics) {
+    const lines = parsePlainText(supabaseLyrics.plain_lyrics);
+    saveLyricsToCache(cacheKey, 'plain', lines);
+    console.log(`[fetchLyrics] ✅ 从 Supabase 加载歌词 (${lines.length} 行)`);
+    return lines;
+  }
+
+  // 2. 如果 Supabase 没有，检查本地缓存（可能是之前的会话数据）
+  const cachedData = getLyricsFromCache(cacheKey, 'plain');
+  if (cachedData) {
+    console.log(`[fetchLyrics] ✅ 从本地缓存加载歌词 (${cachedData.length} 行)`);
+    return cachedData;
+  }
+
+  // 3. 都没有，返回空数组（UI 会显示"点击搜索"提示）
+  console.log('[fetchLyrics] ℹ️ 无可用歌词，等待用户手动搜索');
+  return [];
+};
+
+// ============================================================
+// 手动搜索功能
+// ============================================================
+
 interface LrclibSearchResult {
   id: number;
   trackName: string;
@@ -282,297 +436,63 @@ interface LrclibSearchResult {
   syncedLyrics: string | null;
 }
 
-export const searchLyricsByTitle = async (songTitle: string, artist?: string, directFuzzySearch = false): Promise<LrclibSearchResult[]> => {
+/**
+ * 🔍 用户手动点击"搜索歌曲"按钮时调用
+ * 搜索多个候选歌词结果供选择
+ */
+export const searchLyricsByTitle = async (
+  songTitle: string,
+  artist?: string,
+  directFuzzySearch = false
+): Promise<LrclibSearchResult[]> => {
   try {
-    // 转换为简体进行搜索
     const simplifiedTitle = convertToSimplified(songTitle);
     const simplifiedArtist = artist ? convertToSimplified(artist) : '';
-    console.log(`[lrclib.net] 搜索歌词: ${simplifiedTitle}${simplifiedArtist ? ` - ${simplifiedArtist}` : ''}`);
-    
-    // 降级搜索策略
+    console.log(`[手动搜索] 歌词: ${simplifiedTitle}${simplifiedArtist ? ' - ' + simplifiedArtist : ''}`);
+
     const searchWithParams = async (trackName: string, artistName?: string): Promise<LrclibSearchResult[]> => {
       const params = new URLSearchParams({ track_name: trackName });
       if (artistName) {
         params.append('artist_name', artistName);
       }
       const url = `${API_CONFIG.LRCLIB_SEARCH_URL}?${params.toString()}`;
-      console.log(`[lrclib.net] 搜索URL: ${url}`);
-      
+
       const response = await fetch(url);
       if (!response.ok) {
-        console.error(`[lrclib.net] 搜索失败: HTTP ${response.status}`);
+        console.error(`[手动搜索] 失败: HTTP ${response.status}`);
         return [];
       }
       const results = await response.json();
-      console.log(`[lrclib.net] 搜索结果数量: ${Array.isArray(results) ? results.length : 0}`);
       return Array.isArray(results) ? results : [];
     };
-    
+
     // 直接模糊搜索（只使用歌曲名）
     if (directFuzzySearch) {
-      console.log(`[lrclib.net] 直接进行模糊搜索: ${simplifiedTitle}`);
       const results = await searchWithParams(simplifiedTitle);
-      console.log(`[lrclib.net] 最终搜索结果数量: ${results.length}`);
+      console.log(`[手动搜索] 结果数量: ${results.length}`);
       return results;
     }
-    
-    // 第一轮：精确搜索（歌曲名 + 艺术家名）
+
+    // 精确搜索（歌曲名 + 艺术家名）
     let results = await searchWithParams(simplifiedTitle, simplifiedArtist);
-    
-    // 第二轮：如果没有结果，降级为只使用歌曲名搜索
+
+    // 降级为只使用歌曲名搜索
     if (results.length === 0 && simplifiedTitle) {
-      console.log(`[lrclib.net] 精确搜索无结果，尝试模糊搜索: ${simplifiedTitle}`);
+      console.log(`[手动搜索] 精确搜索无结果，尝试模糊搜索: ${simplifiedTitle}`);
       results = await searchWithParams(simplifiedTitle);
     }
-    
-    console.log(`[lrclib.net] 最终搜索结果数量: ${results.length}`);
+
+    console.log(`[手动搜索] 最终结果数量: ${results.length}`);
     return results;
   } catch (error) {
-    console.error(`[lrclib.net] 搜索失败: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    console.error(`[手动搜索] 失败:`, error);
     return [];
   }
 };
 
-export const fetchLyricsById = async (
-  songId: string,
-  trackId: string,
-  songTitle: string,
-  artist?: string
-): Promise<string[]> => {
-  const cacheKey = `${songId}_${songTitle.trim().toLowerCase()}_${artist || ''}_${trackId}`;
-
-  const cachedData = getLyricsFromCache(cacheKey, 'plain');
-  if (cachedData) {
-    return cachedData;
-  }
-
-  try {
-    // 转换为简体进行搜索
-    const simplifiedTitle = convertToSimplified(songTitle);
-    const simplifiedArtist = artist ? convertToSimplified(artist) : '';
-    console.log(`[lrclib.net] 获取歌词: ${simplifiedTitle}${simplifiedArtist ? ` - ${simplifiedArtist}` : ''}`);
-    
-    // 直接使用简体的歌曲名和艺术家名获取歌词
-    const query = {
-      track_name: simplifiedTitle,
-      artist_name: simplifiedArtist // 使用简体的艺术家名或空字符串
-    };
-    const metadata = await lrclibClient.findLyrics(query);
-
-    if (metadata) {
-      if (metadata.instrumental) {
-        const result = ['纯音乐，无歌词'];
-        saveLyricsToCache(cacheKey, 'plain', result);
-        // 保存到Supabase
-        await saveLyricsToSupabase(
-          songId,
-          songTitle,
-          artist,
-          result.join('\n'),
-          'lrclib'
-        );
-        return result;
-      }
-
-      if (metadata.plainLyrics) {
-        const lines = metadata.plainLyrics.split('\n')
-          .map((line: string) => convertToSimplified(line.trim()))
-          .filter((line: string) => line.length > 0);
-
-        const result = lines.length > 0 ? lines : ['暂无歌词'];
-        saveLyricsToCache(cacheKey, 'plain', result);
-
-        // 保存到Supabase，只保存纯文本歌词
-        await saveLyricsToSupabase(
-          songId,
-          songTitle,
-          artist,
-          result.join('\n'),
-          'lrclib'
-        );
-
-        return result;
-      }
-    }
-
-    const result = ['暂无歌词'];
-    saveLyricsToCache(cacheKey, 'plain', result);
-    return result;
-  } catch (error) {
-    console.error('Error fetching lyrics:', error);
-    const result = ['暂无歌词'];
-    saveLyricsToCache(cacheKey, 'plain', result);
-    return result;
-  }
-};
-
-export const fetchLyrics = async (
-  songId: string,
-  songTitle: string,
-  artist?: string
-): Promise<string[]> => {
-  const cacheKey = `${songId}_${songTitle.trim().toLowerCase()}_${artist || ''}`;
-
-  // 优先从Supabase获取歌词，确保使用最新数据
-  const supabaseLyrics = await fetchLyricsFromSupabase(songId);
-  if (supabaseLyrics && supabaseLyrics.plain_lyrics) {
-    const lines = parsePlainText(supabaseLyrics.plain_lyrics);
-    saveLyricsToCache(cacheKey, 'plain', lines);
-    return lines;
-  }
-
-  // 如果Supabase没有歌词，再检查缓存
-  const cachedData = getLyricsFromCache(cacheKey, 'plain');
-  if (cachedData) {
-    return cachedData;
-  }
-
-  try {
-    // 转换为简体进行搜索
-    const simplifiedTitle = convertToSimplified(songTitle);
-    const simplifiedArtist = artist ? convertToSimplified(artist) : '';
-    console.log(`[lrclib.net] 获取歌词: ${simplifiedTitle}${simplifiedArtist ? ` - ${simplifiedArtist}` : ''}`);
-
-    // 定义搜索函数（带错误处理）
-    const searchLyrics = async (useArtist: boolean): Promise<{ plainLyrics?: string; instrumental?: boolean } | null> => {
-      try {
-        const query = {
-          track_name: simplifiedTitle,
-          artist_name: useArtist ? (simplifiedArtist || '') : '' // 使用简体的歌手名或空字符串
-        };
-        return await lrclibClient.findLyrics(query);
-      } catch (error) {
-        console.log(`[lrclib.net] 搜索失败: ${error instanceof Error ? error.message : 'Unknown error'}`);
-        return null;
-      }
-    };
-
-    // 1. 先尝试使用歌手名和歌曲名搜索
-    let metadata = await searchLyrics(true);
-    
-    // 2. 如果失败，尝试只使用歌曲名搜索
-    if (!metadata) {
-      console.log(`[lrclib.net] 尝试只使用歌曲名搜索: ${songTitle}`);
-      metadata = await searchLyrics(false);
-    }
-
-    if (metadata) {
-      if (metadata.instrumental) {
-        const result = ['纯音乐，无歌词'];
-        saveLyricsToCache(cacheKey, 'plain', result);
-        // 保存到Supabase
-        await saveLyricsToSupabase(
-          songId,
-          songTitle,
-          artist,
-          result.join('\n'),
-          'lrclib'
-        );
-        return result;
-      }
-
-      if (metadata.plainLyrics) {
-        const lines = metadata.plainLyrics.split('\n')
-          .map((line: string) => convertToSimplified(line.trim()))
-          .filter((line: string) => line.length > 0);
-
-        const result = lines.length > 0 ? lines : ['暂无歌词'];
-        saveLyricsToCache(cacheKey, 'plain', result);
-
-        // 保存到Supabase，只保存纯文本歌词
-        await saveLyricsToSupabase(
-          songId,
-          songTitle,
-          artist,
-          result.join('\n'),
-          'lrclib'
-        );
-
-        return result;
-      }
-    }
-
-    const result = ['暂无歌词'];
-    saveLyricsToCache(cacheKey, 'plain', result);
-    return result;
-  } catch (error) {
-    console.error('Error fetching lyrics:', error);
-    const result = ['暂无歌词'];
-    saveLyricsToCache(cacheKey, 'plain', result);
-    return result;
-  }
-};
-
-export const fetchLyricsWithTime = async (
-  songId: string,
-  songTitle: string,
-  artist?: string
-): Promise<Array<{ time: string; text: string }>> => {
-  const cacheKey = `${songId}_${songTitle.trim().toLowerCase()}_${artist || ''}`;
-
-  const cachedData = getLyricsFromCache(cacheKey, 'synced');
-  if (cachedData) {
-    return cachedData;
-  }
-
-  const supabaseLyrics = await fetchLyricsFromSupabase(songId);
-  if (supabaseLyrics && supabaseLyrics.synced_lyrics) {
-    try {
-      const syncedData = JSON.parse(supabaseLyrics.synced_lyrics);
-      saveLyricsToCache(cacheKey, 'synced', syncedData);
-      return syncedData;
-    } catch (error) {
-      console.error('Error parsing synced lyrics from Supabase:', error);
-    }
-  }
-
-  try {
-    // 转换为简体进行搜索
-    const simplifiedTitle = convertToSimplified(songTitle);
-    const simplifiedArtist = artist ? convertToSimplified(artist) : '';
-    console.log(`[lrclib.net] 获取同步歌词: ${simplifiedTitle}${simplifiedArtist ? ` - ${simplifiedArtist}` : ''}`);
-
-    const query = {
-      track_name: simplifiedTitle,
-      artist_name: simplifiedArtist
-    };
-
-    const syncedLyrics = await lrclibClient.getSynced(query);
-
-    if (syncedLyrics && syncedLyrics.length > 0) {
-      const result = syncedLyrics.map((item: any) => ({
-        time: formatTime(item.startTime),
-        text: convertToSimplified(item.text)
-      }));
-
-      saveLyricsToCache(cacheKey, 'synced', result);
-
-      const plainData = result.map(item => item.text).join('\n');
-      await saveLyricsToSupabase(
-        songId,
-        songTitle,
-        artist,
-        plainData,
-        'lrclib'
-      );
-
-      return result;
-    }
-
-    return [];
-  } catch (error) {
-    console.error('Error fetching synced lyrics:', error);
-    return [];
-  }
-};
-
-const formatTime = (ms: number): string => {
-  const totalSeconds = ms / 1000;
-  const minutes = Math.floor(totalSeconds / 60);
-  const seconds = Math.floor(totalSeconds % 60);
-  const milliseconds = Math.floor((totalSeconds % 1) * 100);
-  return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}.${milliseconds.toString().padStart(2, '0')}`;
-};
+// ============================================================
+// 自定义歌词操作
+// ============================================================
 
 export const addCustomLyrics = async (
   songId: string,
@@ -639,4 +559,17 @@ export const clearLyricsCache = (): void => {
   console.log('[缓存] 已清除所有歌词缓存');
 };
 
-export { parseLRC, parsePlainText, convertToSimplified };
+// 兼容旧接口：fetchLyricsById（已废弃，建议使用 fetchLyricsAndSave）
+export const fetchLyricsById = fetchLyricsAndSave;
+
+// 兼容旧接口：fetchLyricsWithTime（已废弃，当前未使用）
+export const fetchLyricsWithTime = async (
+  _songId: string,
+  _songTitle: string,
+  _artist?: string
+): Promise<Array<{ time: string; text: string }>> => {
+  console.warn('[已废弃] fetchLyricsWithTime 已废弃，请使用其他方法');
+  return [];
+};
+
+export { parseLRC, parsePlainText };

@@ -1,5 +1,5 @@
-import React, { useState, useMemo, useCallback } from 'react';
-import { Plus, Search, Music2, Home, Users, User, LogIn, LogOut, Music, Disc } from 'lucide-react';
+import React, { useState, useMemo, useCallback, useEffect } from 'react';
+import { Plus, Search, Music2, Home, Users, User, LogIn, LogOut, Music, Disc, FileText } from 'lucide-react';
 import { Song, ViewState } from './types';
 import { SongCard } from './components/SongCard';
 import { AddSongModal } from './components/AddSongModal';
@@ -56,6 +56,24 @@ const AppContent: React.FC = () => {
   const [searchType, setSearchType] = useState<'song' | 'album' | 'artist'>('song');
   const [displayLimit, setDisplayLimit] = useState(50);
   
+  // 缺失歌词筛选状态（持久化到 localStorage）
+  const [missingLyricsFilter, setMissingLyricsFilter] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('melodylog_missingLyricsFilter') === 'true';
+    } catch {
+      return false;
+    }
+  });
+
+  // 当 missingLyricsFilter 变化时保存到 localStorage
+  useEffect(() => {
+    try {
+      localStorage.setItem('melodylog_missingLyricsFilter', String(missingLyricsFilter));
+    } catch {
+      // ignore localStorage errors
+    }
+  }, [missingLyricsFilter]);
+  
   // Modals
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
@@ -87,6 +105,11 @@ const AppContent: React.FC = () => {
 
     if (selectedTag) {
       result = result.filter(song => song.tags && song.tags.includes(selectedTag));
+    }
+
+    // 缺失歌词筛选
+    if (missingLyricsFilter) {
+      result = result.filter(song => !(song.lyrics && song.lyrics.trim()));
     }
 
     if (searchQuery.trim()) {
@@ -162,7 +185,7 @@ const AppContent: React.FC = () => {
       default:
         return result.slice().sort((a, b) => sortDirection * (a.addedAt - b.addedAt));
     }
-  }, [songs, searchQuery, sortConfig, selectedTag]);
+  }, [songs, searchQuery, sortConfig, selectedTag, missingLyricsFilter]);
 
   // Album search results
   const filteredAlbums = useMemo(() => {
@@ -412,6 +435,25 @@ const AppContent: React.FC = () => {
                         </button>
                       </div>
                     )}
+                    
+                    {/* 缺失歌词筛选按钮 */}
+                    <button
+                      onClick={() => setMissingLyricsFilter(!missingLyricsFilter)}
+                      className={`flex items-center gap-1 px-2 py-0.5 border rounded-full text-xs transition-colors ${
+                        missingLyricsFilter 
+                          ? 'bg-red-50 text-red-600 border-red-200' 
+                          : 'bg-slate-50 text-slate-500 border-slate-200 hover:bg-slate-100'
+                      }`}
+                    >
+                      <FileText size={12} />
+                      <span>{missingLyricsFilter ? '缺失歌词' : '找歌词'}</span>
+                      {missingLyricsFilter && (
+                        <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                          <line x1="18" y1="6" x2="6" y2="18"></line>
+                          <line x1="6" y1="6" x2="18" y2="18"></line>
+                        </svg>
+                      )}
+                    </button>
                     
                     {/* Sort Button - only show for song search or non-search mode */}
                     {!isSearching && (
