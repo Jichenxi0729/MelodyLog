@@ -204,7 +204,7 @@ export const useAppData = () => {
         });
         
         const matchedSong = domesticResults.find(song => {
-          const songNameMatch = song.title.toLowerCase().includes(title.toLowerCase());
+          const songNameMatch = song.name.toLowerCase().includes(title.toLowerCase());
           const artistMatch = song.artist.toLowerCase().includes(artists.join(' ').toLowerCase());
           return songNameMatch && artistMatch;
         });
