@@ -621,7 +621,7 @@ const AppContent: React.FC = () => {
 
                 {/* 歌曲列表 */}
                 {filteredHomeSongs.length > 0 ? (
-                  <div className="divide-y divide-slate-100 -mx-4 px-4">
+                  <div className="-mx-4 px-4">
                     {filteredHomeSongs.slice(0, displayLimit).map(song => (
                       <SongCard 
                           key={song.id} 

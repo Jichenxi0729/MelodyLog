@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Song } from '../types';
-import { setCache, getCache } from '../utils/cacheUtils';
+import { indexedDBHelper } from '../utils/indexedDB';
 import { getAllSongs, addSong, addSongs, updateSong, deleteSong } from '../services/supabaseService';
 import { getCurrentUser, signOut, onAuthStateChange } from '../services/authService';
 import { User as AuthUser } from '../services/authService';
@@ -9,9 +9,9 @@ import { musicApi } from '../services/musicApiAdapter';
 import { useToast } from '../components/Toast';
 
 // Constants
-const STORAGE_KEY = 'melodylog_songs';
 const SUPABASE_TIMEOUT = 6000;
 const LYRICS_CONCURRENCY = 3;
+const FORCE_FULL_SYNC_THRESHOLD = 7 * 24 * 60 * 60 * 1000; // 7 天以上全量同步
 
 // 并发控制工具函数
 const asyncPool = async <T,>(tasks: (() => Promise<T>)[], concurrency: number): Promise<T[]> => {
@@ -34,11 +34,85 @@ const asyncPool = async <T,>(tasks: (() => Promise<T>)[], concurrency: number): 
   return results;
 };
 
+// 从旧 localStorage 迁移数据到 IndexedDB
+const migrateFromLocalStorage = async () => {
+  try {
+    const cachedUser = localStorage.getItem('sb-session');
+    if (!cachedUser) return false;
+    
+    const sessionData = JSON.parse(cachedUser);
+    if (!sessionData?.session?.user) return false;
+    
+    // 尝试从 cacheUtils 的缓存格式读取
+    const oldCacheKey = 'user_songs';
+    const cachedData = localStorage.getItem(oldCacheKey);
+    if (cachedData) {
+      const parsed = JSON.parse(cachedData);
+      if (parsed?.data && Array.isArray(parsed.data)) {
+        await indexedDBHelper.saveAllSongs(parsed.data);
+        await indexedDBHelper.saveMetadata({
+          lastSyncTime: Date.now(),
+          userId: sessionData.session.user.id
+        });
+        localStorage.removeItem(oldCacheKey);
+        return true;
+      }
+    }
+  } catch (error) {
+    console.warn('Migration from localStorage failed:', error);
+  }
+  return false;
+};
+
 export const useAppData = () => {
   const { showToast } = useToast();
   const [songs, setSongs] = useState<Song[]>([]);
   const [user, setUser] = useState<AuthUser | null>(null);
   const [isLoadingUser, setIsLoadingUser] = useState(true);
+
+  // 从 IndexedDB 加载缓存数据
+  const loadFromCache = useCallback(async (userId: string) => {
+    try {
+      const metadata = await indexedDBHelper.getMetadata();
+      
+      // 检查是否是当前用户的数据
+      if (metadata && metadata.userId === userId) {
+        const cachedSongs = await indexedDBHelper.getAllSongs();
+        if (cachedSongs.length > 0) {
+          setSongs(cachedSongs);
+          return { metadata, hasCache: true };
+        }
+      }
+    } catch (error) {
+      console.error('Failed to load from cache:', error);
+    }
+    
+    return { metadata: null, hasCache: false };
+  }, []);
+
+  // 从 Supabase 同步数据
+  const syncFromSupabase = useCallback(async (userId: string) => {
+    try {
+      const timeoutPromise = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('Supabase request timeout')), SUPABASE_TIMEOUT)
+      );
+      const songsPromise = getAllSongs();
+      const songsFromSupabase = await Promise.race([songsPromise, timeoutPromise]) as Song[];
+      
+      // 更新本地缓存
+      await indexedDBHelper.saveAllSongs(songsFromSupabase);
+      await indexedDBHelper.saveMetadata({
+        lastSyncTime: Date.now(),
+        userId
+      });
+      
+      setSongs(songsFromSupabase);
+      return songsFromSupabase;
+    } catch (error) {
+      console.log('Failed to sync from Supabase, sticking with cache:', error);
+      throw error;
+    }
+  }, []);
 
   // Load current user and listen for auth state changes
   useEffect(() => {
@@ -48,10 +122,12 @@ export const useAppData = () => {
         const sessionData = JSON.parse(cachedUser);
         if (sessionData?.session?.user) {
           setUser(sessionData.session.user);
-          const cachedSongs = getCache<Song[]>('user_songs');
-          if (cachedSongs) {
-            setSongs(cachedSongs);
-          }
+          
+          // 尝试加载缓存数据
+          (async () => {
+            await migrateFromLocalStorage();
+            await loadFromCache(sessionData.session.user.id);
+          })();
         }
       } catch (e) {
         console.error('Failed to parse cached session');
@@ -76,38 +152,32 @@ export const useAppData = () => {
       setUser(authUser);
       if (authUser) {
         const fetchSongs = async () => {
-          const cachedSongs = getCache<Song[]>('user_songs');
-          if (cachedSongs) {
-            setSongs(cachedSongs);
-          }
+          // 优先从 IndexedDB 加载缓存
+          await loadFromCache(authUser.id);
           
           try {
-            const timeoutPromise = new Promise<never>((_, reject) => 
-              setTimeout(() => reject(new Error('Supabase request timeout')), SUPABASE_TIMEOUT)
-            );
-            const songsPromise = getAllSongs();
-            const songsFromSupabase = await Promise.race([songsPromise, timeoutPromise]) as Song[];
-            setSongs(songsFromSupabase);
-            setCache('user_songs', songsFromSupabase);
+            await syncFromSupabase(authUser.id);
           } catch (error) {
-            console.log('Failed to load songs from Supabase, sticking with cache:', error);
+            console.log('Failed to sync from Supabase, sticking with cache:', error);
           }
         };
         fetchSongs();
       } else {
         setSongs([]);
+        (async () => {
+          await indexedDBHelper.clearAll();
+        })();
       }
     });
-
     return () => subscription.data.subscription.unsubscribe();
-  }, []);
+  }, [loadFromCache, syncFromSupabase]);
 
   const handleDeleteSong = useCallback(async (songId: string, onConfirm: () => void) => {
     try {
       await deleteSong(songId);
       setSongs(prevSongs => {
         const updatedSongs = prevSongs.filter(song => song.id !== songId);
-        setCache('user_songs', updatedSongs);
+        indexedDBHelper.saveAllSongs(updatedSongs).catch(console.error);
         return updatedSongs;
       });
       showToast('歌曲已删除', 'success');
@@ -134,7 +204,7 @@ export const useAppData = () => {
         });
         
         const matchedSong = domesticResults.find(song => {
-          const songNameMatch = song.name.toLowerCase().includes(title.toLowerCase());
+          const songNameMatch = song.title.toLowerCase().includes(title.toLowerCase());
           const artistMatch = song.artist.toLowerCase().includes(artists.join(' ').toLowerCase());
           return songNameMatch && artistMatch;
         });
@@ -189,7 +259,7 @@ export const useAppData = () => {
               const updatedSongs = prevSongs.map(s =>
                 s.id === addedSong.id ? { ...s, lyrics: result.lyricsText } : s
               );
-              setCache('user_songs', updatedSongs);
+              indexedDBHelper.saveAllSongs(updatedSongs).catch(console.error);
               return updatedSongs;
             });
           }
@@ -200,7 +270,7 @@ export const useAppData = () => {
       
       setSongs(prevSongs => {
         const updatedSongs = [addedSong, ...prevSongs];
-        setCache('user_songs', updatedSongs);
+        indexedDBHelper.saveAllSongs(updatedSongs).catch(console.error);
         return updatedSongs;
       });
       showToast('歌曲添加成功', 'success');
@@ -215,11 +285,11 @@ export const useAppData = () => {
     try {
       await updateSong(updatedSong.id, updatedSong);
       setSongs(prevSongs => {
-        const updatedSongs = prevSongs.map(song => 
+        const songs = prevSongs.map(song => 
           song.id === updatedSong.id ? updatedSong : song
         );
-        setCache('user_songs', updatedSongs);
-        return updatedSongs;
+        indexedDBHelper.saveAllSongs(songs).catch(console.error);
+        return songs;
       });
       showToast('歌曲更新成功', 'success');
     } catch (error) {
@@ -243,7 +313,7 @@ export const useAppData = () => {
         const updatedSongs = prevSongs.map(song => 
           song.album === oldAlbumName ? { ...song, album: newAlbumName } : song
         );
-        setCache('user_songs', updatedSongs);
+        indexedDBHelper.saveAllSongs(updatedSongs).catch(console.error);
         return updatedSongs;
       });
       showToast(`专辑已更新为 "${newAlbumName}"，共 ${albumSongs.length} 首歌曲`, 'success');
@@ -357,7 +427,7 @@ export const useAppData = () => {
                   const updatedSongs = prevSongs.map(s =>
                     s.id === song.id ? { ...s, lyrics: result.lyricsText } : s
                   );
-                  setCache('user_songs', updatedSongs);
+                  indexedDBHelper.saveAllSongs(updatedSongs).catch(console.error);
                   return updatedSongs;
                 });
               }
@@ -374,7 +444,7 @@ export const useAppData = () => {
         
         const updatedSongs = [...addedSongs, ...songs];
         setSongs(updatedSongs);
-        setCache('user_songs', updatedSongs);
+        indexedDBHelper.saveAllSongs(updatedSongs).catch(console.error);
         
         const successMessage = `成功导入 ${addedSongs.length} 首歌曲`;
         if (importErrors.length > 0) {
@@ -427,7 +497,7 @@ export const useAppData = () => {
         const addedSongs = await addSongs(newSongs);
         const updatedSongs = [...addedSongs, ...songs];
         setSongs(updatedSongs);
-        setCache('user_songs', updatedSongs);
+        indexedDBHelper.saveAllSongs(updatedSongs).catch(console.error);
         
         const skipped = importedSongs.length - newSongs.length;
         const msg = `成功导入 ${addedSongs.length} 首歌曲`;
