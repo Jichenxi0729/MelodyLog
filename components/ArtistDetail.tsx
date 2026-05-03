@@ -140,7 +140,7 @@ export const ArtistDetail: React.FC<ArtistDetailProps> = ({ artist, songs, onBac
       )}
 
       {/* Songs List */}
-      <div className="space-y-3">
+      <div>
         {artistSongs.map(song => (
           <SongCard 
             key={song.id} 

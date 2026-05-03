@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
-import { Plus, Search, Music2, Home, Users, User, LogIn, LogOut, Music, Disc, FileText } from 'lucide-react';
-import { Song, ViewState } from './types';
+import { Plus, Search, Music2, Home, Users, User, LogIn, LogOut, Disc, FileText, ChevronRight } from 'lucide-react';
+import { Song } from './types';
 import { SongCard } from './components/SongCard';
 import { AddSongModal } from './components/AddSongModal';
 import ImportModal from './components/ImportModal';
@@ -17,6 +17,9 @@ import { ToastProvider, useToast, ConfirmDialog } from './components/Toast';
 import { exportSongsToCSV, exportSongsToJSON } from './utils/csvExporter';
 import { useAppData } from './hooks/useAppData';
 import { useNavigation } from './hooks/useNavigation';
+import { BannerCarousel } from './components/BannerCarousel';
+import { StatsBar } from './components/StatsBar';
+import { RecentAlbums } from './components/RecentAlbums';
 
 // Constants
 const MENU_CLOSE_DELAY = 200;
@@ -85,6 +88,9 @@ const AppContent: React.FC = () => {
     direction: 'asc' | 'desc';
   }>({ key: 'addedAt', direction: 'desc' });
   const [isSortMenuOpen, setIsSortMenuOpen] = useState(false);
+
+  // 首页视图模式：'dashboard' = 新版首页, 'allSongs' = 全部歌曲列表
+  const [homeViewMode, setHomeViewMode] = useState<'dashboard' | 'allSongs'>('dashboard');
   
   // Auth UI State
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
@@ -413,28 +419,123 @@ const AppContent: React.FC = () => {
         <div>
         {/* VIEW: HOME */}
         {view.type === 'HOME' && (
-          <div className="space-y-3 animate-in fade-in duration-300">
-             <div className="flex items-center justify-between px-1">
-                <div className="flex items-center gap-2">
-                    <h2 className="text-base font-bold text-slate-800">
-                      {isSearching
-                        ? searchType === 'song' ? '歌曲结果' : searchType === 'album' ? '专辑结果' : '歌手结果'
-                        : '最近添加'}
-                    </h2>
-                    {selectedTag && (
-                      <div className="flex items-center gap-1 px-2 py-0.5 bg-amber-50 text-amber-700 border border-amber-200 rounded-full text-xs">
-                        <span>标签: {selectedTag}</span>
+          <div className="animate-in fade-in duration-300">
+            {/* 搜索时显示搜索结果 */}
+            {isSearching ? (
+              <div className="space-y-3">
+                <div className="flex items-center justify-between px-1">
+                  <h2 className="text-base font-bold text-slate-800">
+                    {searchType === 'song' ? '歌曲结果' : searchType === 'album' ? '专辑结果' : '歌手结果'}
+                  </h2>
+                  <span className="text-xs text-slate-400">
+                    {searchType === 'song' ? `${filteredHomeSongs.length} 首歌曲`
+                      : searchType === 'album' ? `${filteredAlbums.length} 张专辑`
+                      : `${filteredArtists.length} 位歌手`}
+                  </span>
+                </div>
+
+                {/* Song Results */}
+                {(!isSearching || searchType === 'song') && (
+                  filteredHomeSongs.length > 0 ? (
+                    <div>
+                      {filteredHomeSongs.map(song => (
+                        <SongCard 
+                            key={song.id} 
+                            song={song} 
+                            onArtistClick={navigateToArtistDetail}
+                            onAlbumClick={navigateToAlbumDetail}
+                            onDelete={() => onDeleteSong(song.id)}
+                            onSongClick={navigateToSongDetail}
+                            onYearSearch={(year) => setSearchQuery(year.toString())}
+                        />
+                      ))}
+                    </div>
+                  ) : isSearching && searchType === 'song' ? (
+                    <div className="text-center py-16 px-6">
+                      <Music2 className="text-slate-300 mx-auto mb-3" size={36} />
+                      <p className="text-slate-500 text-sm">未找到匹配的歌曲</p>
+                    </div>
+                  ) : null
+                )}
+
+                {/* Album Results */}
+                {isSearching && searchType === 'album' && (
+                  filteredAlbums.length > 0 ? (
+                    <div className="grid grid-cols-3 gap-3">
+                      {filteredAlbums.map(album => (
                         <button
-                          onClick={() => setSelectedTag(null)}
-                          className="ml-1 text-amber-500 hover:text-amber-700"
+                          key={album.name}
+                          onClick={() => navigateToAlbumDetail(album.name)}
+                          className="group text-left"
                         >
-                          <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                            <line x1="18" y1="6" x2="6" y2="18"></line>
-                            <line x1="6" y1="6" x2="18" y2="18"></line>
-                          </svg>
+                          <div className="aspect-square rounded-lg overflow-hidden shadow-sm group-hover:shadow-md transition-shadow">
+                            {album.coverUrl ? (
+                              <img src={album.coverUrl} alt={album.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
+                            ) : (
+                              <div className="w-full h-full bg-slate-100 flex items-center justify-center">
+                                <Disc size={28} className="text-slate-300" />
+                              </div>
+                            )}
+                          </div>
+                          <p className="text-xs font-medium text-slate-800 mt-1 truncate group-hover:text-brand-light transition-colors">{album.name}</p>
+                          <p className="text-[10px] text-slate-400 truncate">{album.artists}{album.year ? ` · ${album.year}` : ''}</p>
                         </button>
-                      </div>
-                    )}
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-center py-16 px-6">
+                      <Disc className="text-slate-300 mx-auto mb-3" size={36} />
+                      <p className="text-slate-500 text-sm">未找到匹配的专辑</p>
+                    </div>
+                  )
+                )}
+
+                {/* Artist Results */}
+                {isSearching && searchType === 'artist' && (
+                  filteredArtists.length > 0 ? (
+                    <div className="space-y-1">
+                      {filteredArtists.map(artist => (
+                        <button
+                          key={artist.name}
+                          onClick={() => navigateToArtistDetail(artist.name)}
+                          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-slate-50 transition-all group text-left"
+                        >
+                          <div className="w-10 h-10 rounded-full overflow-hidden bg-slate-100 flex-shrink-0 shadow-sm">
+                            {artist.coverUrl ? (
+                              <img src={artist.coverUrl} alt={artist.name} className="w-full h-full object-cover" />
+                            ) : (
+                              <div className="w-full h-full flex items-center justify-center">
+                                <User size={16} className="text-slate-400" />
+                              </div>
+                            )}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium text-slate-800 truncate group-hover:text-brand-light transition-colors">{artist.name}</p>
+                            <p className="text-xs text-slate-400">{artist.songCount} 首歌曲</p>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-center py-16 px-6">
+                      <Users className="text-slate-300 mx-auto mb-3" size={36} />
+                      <p className="text-slate-500 text-sm">未找到匹配的歌手</p>
+                    </div>
+                  )
+                )}
+              </div>
+            ) : homeViewMode === 'allSongs' ? (
+              /* 全部歌曲视图 */
+              <div className="space-y-3">
+                <div className="flex items-center justify-between px-1">
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => setHomeViewMode('dashboard')}
+                      className="text-sm text-brand-light hover:text-blue-600 transition-colors"
+                    >
+                      &larr; 首页
+                    </button>
+                    <h2 className="text-base font-bold text-slate-800">全部歌曲</h2>
                     
                     {/* 缺失歌词筛选按钮 */}
                     <button
@@ -454,9 +555,8 @@ const AppContent: React.FC = () => {
                         </svg>
                       )}
                     </button>
-                    
-                    {/* Sort Button - only show for song search or non-search mode */}
-                    {!isSearching && (
+
+                    {/* Sort Button */}
                     <div className="relative">
                       <button
                         onClick={() => setIsSortMenuOpen(!isSortMenuOpen)}
@@ -502,13 +602,12 @@ const AppContent: React.FC = () => {
                         </div>
                       )}
                     </div>
-                    )}
-                </div>
-                
-                <div className="flex items-center gap-1 text-slate-400 text-xs">
+                  </div>
+
+                  <div className="flex items-center gap-1 text-slate-400 text-xs">
                     <button
                       onClick={handleRandomRoam}
-                      className="text-slate-400 hover:text-brand-light transition-colors focus:outline-none focus:ring-2 focus:ring-brand-light/20 p-1 rounded"
+                      className="text-slate-400 hover:text-brand-light transition-colors focus:outline-none p-1 rounded"
                       title="随机漫游"
                       disabled={songs.length === 0}
                     >
@@ -516,130 +615,123 @@ const AppContent: React.FC = () => {
                         <path d="M12 2v6m0 12v2M2 12h6m12 0h2M2 12l3.5-3.5m11.5 3.5-3.5-3.5M2 12l3.5 3.5m11.5-3.5-3.5 3.5" />
                       </svg>
                     </button>
-                    <span>
-                      {isSearching
-                        ? searchType === 'song' ? `${filteredHomeSongs.length} 首歌曲`
-                          : searchType === 'album' ? `${filteredAlbums.length} 张专辑`
-                          : `${filteredArtists.length} 位歌手`
-                        : `${filteredHomeSongs.length} 条记录`}
-                    </span>
+                    <span>{filteredHomeSongs.length} 条记录</span>
+                  </div>
                 </div>
-            </div>
 
-            {/* Song Results */}
-            {(!isSearching || searchType === 'song') && (
-              filteredHomeSongs.length > 0 ? (
-                <>
-                  {filteredHomeSongs.slice(0, isSearching ? filteredHomeSongs.length : displayLimit).map(song => (
-                    <SongCard 
-                        key={song.id} 
-                        song={song} 
-                        onArtistClick={navigateToArtistDetail}
-                        onAlbumClick={navigateToAlbumDetail}
-                        onDelete={() => onDeleteSong(song.id)}
-                        onSongClick={navigateToSongDetail}
-                        onYearSearch={(year) => setSearchQuery(year.toString())}
-                    />
-                  ))}
-                  {!isSearching && filteredHomeSongs.length > displayLimit && (
+                {/* 歌曲列表 */}
+                {filteredHomeSongs.length > 0 ? (
+                  <div className="divide-y divide-slate-100 -mx-4 px-4">
+                    {filteredHomeSongs.slice(0, displayLimit).map(song => (
+                      <SongCard 
+                          key={song.id} 
+                          song={song} 
+                          onArtistClick={navigateToArtistDetail}
+                          onAlbumClick={navigateToAlbumDetail}
+                          onDelete={() => onDeleteSong(song.id)}
+                          onSongClick={navigateToSongDetail}
+                          onYearSearch={(year) => setSearchQuery(year.toString())}
+                      />
+                    ))}
+                    {filteredHomeSongs.length > displayLimit && (
+                      <button
+                        onClick={() => setDisplayLimit(prev => prev + 50)}
+                        className="w-full py-3 text-sm text-brand-light hover:text-brand-dark font-medium transition-colors"
+                      >
+                        加载更多 ({filteredHomeSongs.length - displayLimit} 首未显示)
+                      </button>
+                    )}
+                  </div>
+                ) : (
+                  <div className="text-center py-20 px-6">
+                    <div className="bg-slate-50 inline-flex p-4 rounded-full shadow-sm mb-4">
+                      <Music2 className="text-slate-300" size={40} />
+                    </div>
+                    <h3 className="text-slate-800 font-semibold text-lg mb-1">没有找到音乐</h3>
+                    <p className="text-slate-500 max-w-xs mx-auto mb-6 text-sm">您的音乐库是空的，快去添加第一首歌吧！</p>
+                    <button onClick={() => setIsAddModalOpen(true)} className="text-brand-light font-medium hover:underline text-sm">添加音乐</button>
+                  </div>
+                )}
+              </div>
+            ) : (
+              /* 新版 Dashboard 首页 */
+              <div className="space-y-5">
+                {/* Banner 轮播 */}
+                <BannerCarousel songs={songs} onSongClick={navigateToSongDetail} />
+
+                {/* 统计数据 */}
+                <StatsBar 
+                  songs={songs}
+                  onNavigateHome={() => setHomeViewMode('allSongs')}
+                  onNavigateArtists={navigateToArtists}
+                  onNavigateAlbums={navigateToAlbums}
+                  onNavigateTags={navigateToTags}
+                />
+
+                {/* 最近添加歌曲 */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between px-1">
+                    <h2 className="text-base font-bold text-slate-800 flex items-center gap-1.5">
+                      <Music2 size={16} className="text-brand-light" />
+                      最近添加
+                    </h2>
                     <button
-                      onClick={() => setDisplayLimit(prev => prev + 50)}
-                      className="w-full py-3 text-sm text-brand-light hover:text-brand-dark font-medium transition-colors"
+                      onClick={() => {
+                        setHomeViewMode('allSongs');
+                        setDisplayLimit(50);
+                      }}
+                      className="flex items-center gap-0.5 text-xs text-blue-500 hover:text-blue-600 font-medium transition-colors"
                     >
-                      加载更多 ({filteredHomeSongs.length - displayLimit} 首未显示)
+                      查看全部
+                      <ChevronRight size={14} />
                     </button>
+                  </div>
+
+                  {songs.length > 0 ? (
+                    <div className="-mx-4 px-4">
+                      {filteredHomeSongs.slice(0, 5).map(song => (
+                        <SongCard 
+                          key={song.id} 
+                          song={song} 
+                          onArtistClick={navigateToArtistDetail}
+                          onAlbumClick={navigateToAlbumDetail}
+                          onDelete={() => onDeleteSong(song.id)}
+                          onSongClick={navigateToSongDetail}
+                          onYearSearch={(year) => setSearchQuery(year.toString())}
+                        />
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-center py-10">
+                      <p className="text-slate-400 text-sm">暂无歌曲</p>
+                    </div>
                   )}
-                </>
-              ) : isSearching && searchType === 'song' ? (
-                <div className="text-center py-16 px-6">
-                  <Music2 className="text-slate-300 mx-auto mb-3" size={36} />
-                  <p className="text-slate-500 text-sm">未找到匹配的歌曲</p>
                 </div>
-              ) : null
-            )}
 
-            {/* Album Results */}
-            {isSearching && searchType === 'album' && (
-              filteredAlbums.length > 0 ? (
-                <div className="grid grid-cols-3 gap-3">
-                  {filteredAlbums.map(album => (
-                    <button
-                      key={album.name}
-                      onClick={() => navigateToAlbumDetail(album.name)}
-                      className="group text-left"
+                {/* 最近专辑 */}
+                <RecentAlbums 
+                  songs={songs}
+                  displayCount={5}
+                  onAlbumClick={navigateToAlbumDetail}
+                  onViewAll={navigateToAlbums}
+                />
+
+                {/* 空状态提示 */}
+                {songs.length === 0 && (
+                  <div className="text-center py-12 px-6">
+                    <div className="bg-slate-50 inline-flex p-4 rounded-full shadow-sm mb-4">
+                      <Music2 className="text-slate-300" size={40} />
+                    </div>
+                    <h3 className="text-slate-800 font-semibold text-base mb-1">没有找到音乐</h3>
+                    <p className="text-slate-500 text-sm mb-4">您的音乐库是空的，快去添加第一首歌吧！</p>
+                    <button 
+                      onClick={() => setIsAddModalOpen(true)}
+                      className="px-5 py-2.5 bg-brand-light text-white font-medium rounded-lg hover:bg-brand-dark transition-colors text-sm"
                     >
-                      <div className="aspect-square rounded-lg overflow-hidden shadow-sm group-hover:shadow-md transition-shadow">
-                        {album.coverUrl ? (
-                          <img src={album.coverUrl} alt={album.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
-                        ) : (
-                          <div className="w-full h-full bg-slate-100 flex items-center justify-center">
-                            <Disc size={28} className="text-slate-300" />
-                          </div>
-                        )}
-                      </div>
-                      <p className="text-xs font-medium text-slate-800 mt-1 truncate group-hover:text-brand-light transition-colors">{album.name}</p>
-                      <p className="text-[10px] text-slate-400 truncate">{album.artists}{album.year ? ` · ${album.year}` : ''}</p>
+                      添加音乐
                     </button>
-                  ))}
-                </div>
-              ) : (
-                <div className="text-center py-16 px-6">
-                  <Disc className="text-slate-300 mx-auto mb-3" size={36} />
-                  <p className="text-slate-500 text-sm">未找到匹配的专辑</p>
-                </div>
-              )
-            )}
-
-            {/* Artist Results */}
-            {isSearching && searchType === 'artist' && (
-              filteredArtists.length > 0 ? (
-                <div className="space-y-1">
-                  {filteredArtists.map(artist => (
-                    <button
-                      key={artist.name}
-                      onClick={() => navigateToArtistDetail(artist.name)}
-                      className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-slate-50 transition-all group text-left"
-                    >
-                      <div className="w-10 h-10 rounded-full overflow-hidden bg-slate-100 flex-shrink-0 shadow-sm">
-                        {artist.coverUrl ? (
-                          <img src={artist.coverUrl} alt={artist.name} className="w-full h-full object-cover" />
-                        ) : (
-                          <div className="w-full h-full flex items-center justify-center">
-                            <User size={16} className="text-slate-400" />
-                          </div>
-                        )}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-slate-800 truncate group-hover:text-brand-light transition-colors">{artist.name}</p>
-                        <p className="text-xs text-slate-400">{artist.songCount} 首歌曲</p>
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              ) : (
-                <div className="text-center py-16 px-6">
-                  <Users className="text-slate-300 mx-auto mb-3" size={36} />
-                  <p className="text-slate-500 text-sm">未找到匹配的歌手</p>
-                </div>
-              )
-            )}
-
-            {/* Empty state when not searching */}
-            {!isSearching && filteredHomeSongs.length === 0 && (
-              <div className="text-center py-20 px-6">
-                <div className="bg-slate-50 inline-flex p-4 rounded-full shadow-sm mb-4">
-                  <Music2 className="text-slate-300" size={40} />
-                </div>
-                <h3 className="text-slate-800 font-semibold text-lg mb-1">没有找到音乐</h3>
-                <p className="text-slate-500 max-w-xs mx-auto mb-6 text-sm">
-                  您的音乐库是空的，快去添加第一首歌吧！
-                </p>
-                <button 
-                  onClick={() => setIsAddModalOpen(true)}
-                  className="text-brand-light font-medium hover:underline text-sm"
-                >
-                  添加音乐
-                </button>
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -741,7 +833,7 @@ const AppContent: React.FC = () => {
         <div className="max-w-3xl mx-auto px-4 py-1">
           <div className="flex justify-around items-center">
               <button
-                onClick={() => { navigateToHome(); setDisplayLimit(50); }}
+                onClick={() => { navigateToHome(); setDisplayLimit(50); setHomeViewMode('dashboard'); }}
                 className={`flex flex-col items-center justify-center w-12 h-12 rounded-xl mx-0.5 transition-all duration-200 ${
                   view.type === 'HOME' 
                     ? 'bg-brand-light/10 text-brand-light' 

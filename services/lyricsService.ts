@@ -342,7 +342,7 @@ export const fetchLyricsAndSave = async (
   songId: string,
   songTitle: string,
   artist?: string
-): Promise<boolean> => {
+): Promise<{ success: boolean; lyricsText?: string }> => {
   try {
     console.log(`[自动获取歌词] 开始: ${songTitle}${artist ? ` - ${artist}` : ''}`);
 
@@ -357,12 +357,13 @@ export const fetchLyricsAndSave = async (
       ).filter(text => text.length > 0);
 
       if (lines.length > 0 && lines[0] !== '暂无歌词') {
+        const joinedLyrics = lines.join('\n');
         // 保存到 Supabase
         const success = await saveLyricsToSupabase(
           songId,
           songTitle,
           artist,
-          lines.join('\n'),
+          joinedLyrics,
           'lyrics-lib'
         );
 
@@ -371,15 +372,15 @@ export const fetchLyricsAndSave = async (
         saveLyricsToCache(cacheKey, 'plain', lines);
 
         console.log(`[自动获取歌词] ✅ 成功保存到 Supabase (${lines.length} 行)`);
-        return true;
+        return { success: true, lyricsText: joinedLyrics };
       }
     }
 
     console.log('[自动获取歌词] ⚠️ 未找到有效歌词');
-    return false;
+    return { success: false };
   } catch (error) {
     console.error('[自动获取歌词] ❌ 失败:', error);
-    return false;
+    return { success: false };
   }
 };
 

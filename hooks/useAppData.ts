@@ -180,10 +180,23 @@ export const useAppData = () => {
     try {
       const addedSong = await addSong(newSong);
       
-      // 后台自动获取歌词（不阻塞用户操作）
-      fetchLyricsAndSave(addedSong.id, addedSong.title, addedSong.artists[0]).catch(error => {
-        console.warn('歌词自动获取失败:', error);
-      });
+      // 后台自动获取歌词（不阻塞用户操作，成功后更新本地 state）
+      fetchLyricsAndSave(addedSong.id, addedSong.title, addedSong.artists[0])
+        .then(result => {
+          if (result.success && result.lyricsText) {
+            // 歌词获取成功，更新本地 songs state 以同步歌词数据
+            setSongs(prevSongs => {
+              const updatedSongs = prevSongs.map(s =>
+                s.id === addedSong.id ? { ...s, lyrics: result.lyricsText } : s
+              );
+              setCache('user_songs', updatedSongs);
+              return updatedSongs;
+            });
+          }
+        })
+        .catch(error => {
+          console.warn('歌词自动获取失败:', error);
+        });
       
       setSongs(prevSongs => {
         const updatedSongs = [addedSong, ...prevSongs];
@@ -337,7 +350,17 @@ export const useAppData = () => {
             try {
               const artist = song.artists[0];
               // 批量导入时自动获取歌词并保存到 Supabase
-              await fetchLyricsAndSave(song.id, song.title, artist);
+              const result = await fetchLyricsAndSave(song.id, song.title, artist);
+              if (result.success && result.lyricsText) {
+                // 更新本地 state 以同步歌词数据
+                setSongs(prevSongs => {
+                  const updatedSongs = prevSongs.map(s =>
+                    s.id === song.id ? { ...s, lyrics: result.lyricsText } : s
+                  );
+                  setCache('user_songs', updatedSongs);
+                  return updatedSongs;
+                });
+              }
             } catch (error) {
               console.warn('歌词自动获取失败:', song.title, error);
             }

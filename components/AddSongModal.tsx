@@ -176,17 +176,17 @@ export const AddSongModal: React.FC<AddSongModalProps> = ({ isOpen, onClose, onA
     // 如果用户通过搜索选择了具体的歌曲，直接使用选择的歌曲信息
     let songTitle = title;
     let songArtist = artist;
-    let coverUrl = '';
+    let finalCoverUrl = coverUrl || '';  // 使用 state 中的用户手动输入值
     let matchedAlbum = album;
-    let releaseDate: string | undefined = undefined;
+    let finalReleaseDate = releaseDate || undefined;  // 使用 state 中的用户手动输入值
     
     if (selectedSong) {
       // 使用用户选择的歌曲信息，包括完整的标题、艺术家、专辑、封面和发行日期
       songTitle = selectedSong.name;
       songArtist = selectedSong.artist;
-      coverUrl = selectedSong.coverUrl || '';
+      finalCoverUrl = selectedSong.coverUrl || '';
       matchedAlbum = selectedSong.album;
-      releaseDate = selectedSong.releaseDate;
+      finalReleaseDate = selectedSong.releaseDate;
       console.log('使用用户选择的歌曲信息（' + 
                  (searchPlatform === 'netease' ? '网易云音乐' : 
                   searchPlatform === 'qq' ? 'QQ音乐' : 
@@ -202,7 +202,7 @@ export const AddSongModal: React.FC<AddSongModalProps> = ({ isOpen, onClose, onA
     } else {
       // 手动输入模式
       // 如果用户手动输入了封面URL或发行日期，直接使用，不再进行API匹配
-      if (coverUrl || releaseDate) {
+      if (finalCoverUrl || finalReleaseDate) {
         console.log('使用用户手动输入的歌曲信息（封面URL或发行日期）');
       } else {
         // 只有在用户没有输入封面和发行日期时，才尝试API匹配
@@ -220,11 +220,11 @@ export const AddSongModal: React.FC<AddSongModalProps> = ({ isOpen, onClose, onA
           });
 
           if (matchedSong) {
-            coverUrl = matchedSong.coverUrl || '';
+            finalCoverUrl = matchedSong.coverUrl || '';
             if (!album.trim()) {
               matchedAlbum = matchedSong.album;
             }
-            releaseDate = matchedSong.releaseDate;
+            finalReleaseDate = matchedSong.releaseDate;
             console.log('使用国内版完全匹配到的歌曲信息');
           } else {
             const internationalResults = await musicApi.search({
@@ -235,11 +235,11 @@ export const AddSongModal: React.FC<AddSongModalProps> = ({ isOpen, onClose, onA
 
             if (internationalResults.length > 0) {
               const internationalSong = internationalResults[0];
-              coverUrl = internationalSong.coverUrl || '';
+              finalCoverUrl = internationalSong.coverUrl || '';
               if (!album.trim()) {
                 matchedAlbum = internationalSong.album;
               }
-              releaseDate = internationalSong.releaseDate;
+              finalReleaseDate = internationalSong.releaseDate;
               console.log('使用国际版第一首歌的信息');
             } else {
               console.log('国际版也没有找到歌曲，使用用户输入的信息');
@@ -252,7 +252,7 @@ export const AddSongModal: React.FC<AddSongModalProps> = ({ isOpen, onClose, onA
     }
     
     // 使用匹配到的信息或用户输入的信息
-    await onAdd(songTitle, songArtist, matchedAlbum, coverUrl, releaseDate, tags.length > 0 ? tags : undefined);
+    await onAdd(songTitle, songArtist, matchedAlbum, finalCoverUrl, finalReleaseDate, tags.length > 0 ? tags : undefined);
     setIsLoading(false);
     
     // 重置状态

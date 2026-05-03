@@ -114,7 +114,8 @@ export async function addSong(song: Song): Promise<Song> {
       coverUrl: data.coverUrl || '',
       releaseDate: data.releaseDate || '',
       album: data.album || '',
-      tags: data.tags || []
+      tags: data.tags || [],
+      lyrics: data.user_lyrics || data.lyrics || undefined,
     };
   } catch (error) {
     // 处理AuthSessionMissingError或其他错误

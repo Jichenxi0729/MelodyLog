@@ -133,7 +133,7 @@ export const AlbumDetail: React.FC<AlbumDetailProps> = ({ album, songs, onBack, 
 
       {/* Songs List */}
       <h3 className="text-lg font-bold text-slate-800 mb-4 px-1 border-b border-slate-100 pb-2">包含曲目</h3>
-      <div className="space-y-3">
+      <div>
         {albumSongs.map(song => (
           <SongCard 
             key={song.id} 
