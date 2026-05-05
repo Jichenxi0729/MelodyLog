@@ -15,14 +15,18 @@ export const supabase = createClient(supabaseUrl, supabaseKey, {
   global: {
     fetch: async (url, options = {}) => {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 8000); // 8秒超时，减少等待时间
+      const timeoutId = setTimeout(() => controller.abort(), 20000); // 增加超时时间到20秒，适应移动端网络
       try {
         const response = await fetch(url, { ...options, signal: controller.signal });
         clearTimeout(timeoutId);
         return response;
-      } catch (error) {
+      } catch (error: any) {
         clearTimeout(timeoutId);
-        console.log('Supabase fetch timeout or error, will use cache');
+        if (error.name === 'AbortError') {
+          console.error('❌ Supabase请求超时，请检查网络连接');
+        } else {
+          console.error('❌ Supabase请求失败:', error.message);
+        }
         throw error;
       }
     },

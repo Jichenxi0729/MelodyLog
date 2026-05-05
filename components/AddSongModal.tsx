@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { X, Music, User, Disc, Loader2, Search, Check, ChevronDown, ChevronUp, Tag } from 'lucide-react';
+import { X, Music, User, Disc, Loader2, Search, Check, ChevronDown, ChevronUp, Tag, Sparkles } from 'lucide-react';
 import { musicApi, SongInfo } from '../services/musicApiAdapter';
+import { llmParser, ParsedSongInfo } from '../services/llmParser';
 import { getTagsFromSongs, addTagToHistory, getNextColorIndex } from '../utils/tagUtils';
 
 interface AddSongModalProps {
@@ -30,9 +31,16 @@ export const AddSongModal: React.FC<AddSongModalProps> = ({ isOpen, onClose, onA
   const [isSearching, setIsSearching] = useState(false);
   const [selectedSong, setSelectedSong] = useState<SongInfo | null>(null);
   const [showSearchResults, setShowSearchResults] = useState(false);
-  const [activeTab, setActiveTab] = useState<'search' | 'manual'>('search'); // 默认切换到智能搜索
+  const [activeTab, setActiveTab] = useState<'search' | 'manual' | 'ai'>('search'); // 添加智能识别选项
   const [searchError, setSearchError] = useState(''); // 搜索平台状态
   const [searchPlatform, setSearchPlatform] = useState<'itunes-domestic' | 'itunes-international' | 'netease' | 'qq'>('itunes-domestic'); // 搜索平台选择
+
+  // 智能识别相关状态
+  const [aiDescription, setAiDescription] = useState('');
+  const [isAiParsing, setIsAiParsing] = useState(false);
+  const [aiParseResult, setAiParseResult] = useState<ParsedSongInfo | null>(null);
+  const [aiSearchResults, setAiSearchResults] = useState<SongInfo[]>([]);
+  const [isAiSearching, setIsAiSearching] = useState(false);
 
   useEffect(() => {
     if (isOpen) {
@@ -48,6 +56,9 @@ export const AddSongModal: React.FC<AddSongModalProps> = ({ isOpen, onClose, onA
       setSelectedSong(null);
       setShowSearchResults(false);
       setActiveTab('search');
+      setAiDescription('');
+      setAiParseResult(null);
+      setAiSearchResults([]);
       setSearchError('');
     }
   }, [isOpen]);
@@ -306,6 +317,143 @@ export const AddSongModal: React.FC<AddSongModalProps> = ({ isOpen, onClose, onA
     await handleConfirmAdd();
   };
 
+  // 智能识别 - 解析描述并自动保存
+  const handleAiParse = async () => {
+    if (!aiDescription.trim()) return;
+
+    setIsAiParsing(true);
+    setAiParseResult(null);
+    setAiSearchResults([]);
+
+    try {
+      // ==================== 步骤1: 信息输入 ====================
+      console.log('%c=== 【步骤1】信息输入 ===', 'color: #22c55e; font-weight: bold');
+      console.log('输入描述:', aiDescription);
+      
+      // ==================== 步骤2: AI解析 ====================
+      console.log('%c=== 【步骤2】AI解析中... ===', 'color: #3b82f6; font-weight: bold');
+      const result = await llmParser.parseDescription(aiDescription);
+      
+      if (result.success && result.data) {
+        setAiParseResult(result.data);
+        console.log('%c✓ AI解析成功', 'color: #22c55e');
+        console.log('解析结果:', {
+          songName: result.data.songName,
+          artist: result.data.artist,
+          album: result.data.album || '未解析到专辑',
+          tags: result.data.tags || []
+        });
+        
+        // ==================== 步骤3: 调用iTunes API搜索 ====================
+        if (result.data.songName && result.data.artist) {
+          console.log('%c=== 【步骤3】调用iTunes API搜索 ===', 'color: #8b5cf6; font-weight: bold');
+          setIsAiSearching(true);
+          const searchResult = await musicApi.search({
+            keyword: `${result.data.songName} ${result.data.artist}`,
+            apiType: 'itunes-domestic',
+            limit: 5
+          });
+          setAiSearchResults(searchResult);
+          setIsAiSearching(false);
+          
+          if (searchResult.length > 0) {
+            const firstSong = searchResult[0];
+            console.log('%c✓ 搜索成功，找到 %d 首匹配歌曲', 'color: #22c55e', searchResult.length);
+            console.log('自动选择第一首:', {
+              name: firstSong.name,
+              artist: firstSong.artist,
+              album: firstSong.album,
+              coverUrl: firstSong.coverUrl ? '✓ 有封面' : '无封面',
+              releaseDate: firstSong.releaseDate || '未知'
+            });
+            
+            // 计算最终标签
+            const finalTags = result.data.tags && result.data.tags.length > 0 
+              ? [...new Set([...tags, ...result.data.tags])]
+              : tags;
+            
+            // 填充表单状态
+            setSelectedSong(firstSong);
+            setTitle(firstSong.name);
+            setArtist(firstSong.artist);
+            setAlbum(firstSong.album);
+            setCoverUrl(firstSong.coverUrl || '');
+            setReleaseDate(firstSong.releaseDate || '');
+            setTags(finalTags);
+            
+            // 等待状态更新完成
+            await new Promise(resolve => setTimeout(resolve, 100));
+            
+            // ==================== 步骤4: 自动保存 ====================
+            console.log('%c=== 【步骤4】自动保存 ===', 'color: #f59e0b; font-weight: bold');
+            console.log('即将保存的完整信息:', {
+              title: firstSong.name,
+              artist: firstSong.artist,
+              album: firstSong.album,
+              coverUrl: firstSong.coverUrl,
+              releaseDate: firstSong.releaseDate,
+              tags: finalTags
+            });
+            
+            // 直接调用保存函数，不经过表单状态
+            await onAdd(
+              firstSong.name,
+              firstSong.artist,
+              firstSong.album,
+              firstSong.coverUrl || undefined,
+              firstSong.releaseDate || undefined,
+              finalTags.length > 0 ? finalTags : undefined
+            );
+            
+            console.log('%c=== ✅ 流程完成 ===', 'color: #22c55e; font-weight: bold; font-size: 14px');
+            console.log('✓ 歌曲信息已保存到数据库');
+            
+            // 手动关闭模态框
+            onClose();
+            console.log('✓ 模态框已关闭');
+          } else {
+            console.log('%c✗ 搜索结果为空', 'color: #ef4444');
+          }
+        }
+      } else {
+        console.log('%c✗ AI解析失败:', 'color: #ef4444', result.error);
+      }
+    } catch (error) {
+      console.error('%c✗ 智能识别流程失败:', 'color: #ef4444', error);
+    } finally {
+      setIsAiParsing(false);
+    }
+  };
+
+  // 智能识别 - 使用解析结果填充表单
+  const handleUseAiResult = () => {
+    if (aiParseResult) {
+      setTitle(aiParseResult.songName);
+      setArtist(aiParseResult.artist);
+      if (aiParseResult.album) {
+        setAlbum(aiParseResult.album);
+      }
+      if (aiParseResult.tags && aiParseResult.tags.length > 0) {
+        setTags([...tags, ...aiParseResult.tags.filter(t => !tags.includes(t))]);
+      }
+    }
+  };
+
+  // 智能识别 - 选择搜索结果
+  const handleSelectAiSong = (song: SongInfo) => {
+    setSelectedSong(song);
+    setTitle(song.name);
+    setArtist(song.artist);
+    setAlbum(song.album);
+    setCoverUrl(song.coverUrl || '');
+    setReleaseDate(song.releaseDate || '');
+    
+    // 如果有AI解析出的标签，保留标签
+    if (aiParseResult?.tags) {
+      setTags([...new Set([...tags, ...aiParseResult.tags])]);
+    }
+  };
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
       <div className="bg-white rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden scale-100 animate-in zoom-in-95 duration-200">
@@ -332,6 +480,17 @@ export const AddSongModal: React.FC<AddSongModalProps> = ({ isOpen, onClose, onA
             }`}
           >
             智能搜索
+          </button>
+          <button
+            onClick={() => setActiveTab('ai')}
+            className={`flex-1 py-3 text-sm font-medium transition-colors ${
+              activeTab === 'ai' 
+                ? 'text-brand-light border-b-2 border-brand-light' 
+                : 'text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            <Sparkles size={14} className="inline mr-1" />
+            智能识别
           </button>
           <button
             onClick={() => setActiveTab('manual')}
@@ -500,6 +659,170 @@ export const AddSongModal: React.FC<AddSongModalProps> = ({ isOpen, onClose, onA
                         未找到相关歌曲，请尝试其他关键词
                       </div>
                     )}
+                  </div>
+                )}
+              </div>
+            </>
+          ) : activeTab === 'ai' ? (
+            <>
+              {/* 智能识别区域 */}
+              <div className="space-y-4">
+                <div className="bg-gradient-to-r from-blue-50 to-blue-100 rounded-xl p-4">
+                  <div className="flex items-center gap-2 mb-3">
+                    <Sparkles className="text-blue-500" size={18} />
+                    <span className="text-sm font-medium text-blue-800">智能描述识别</span>
+                  </div>
+                  <p className="text-xs text-gray-500 mb-3">
+                    用自然语言描述您听到的歌曲，AI会自动识别歌曲名、歌手和标签
+                  </p>
+                  <div className="space-y-3">
+                    <textarea
+                      value={aiDescription}
+                      onChange={(e) => setAiDescription(e.target.value)}
+                      onKeyPress={(e) => e.key === 'Enter' && !e.shiftKey && (e.preventDefault(), handleAiParse())}
+                      placeholder="例如：我听了孙燕姿的遇见，我所给的标签是喜欢歌手与经典好歌"
+                      className="w-full px-4 py-3 bg-white border border-blue-200 rounded-lg focus:ring-2 focus:ring-blue-400 focus:border-blue-400 outline-none transition-all text-sm resize-none h-24 placeholder-gray-400"
+                    />
+                    <div className="flex gap-2">
+                      <button
+                        onClick={handleAiParse}
+                        disabled={isAiParsing || !aiDescription.trim()}
+                        className="flex-1 py-3 bg-blue-500 hover:bg-blue-600 text-white font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                      >
+                        {isAiParsing ? <Loader2 className="animate-spin" size={16} /> : <Sparkles size={16} />}
+                        {isAiParsing ? '识别中...' : '智能识别'}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 解析结果展示 */}
+                {aiParseResult && (
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-medium text-blue-800">识别结果</span>
+                      <button
+                        onClick={handleUseAiResult}
+                        className="text-sm text-blue-500 hover:text-blue-600 font-medium"
+                      >
+                        使用此结果
+                      </button>
+                    </div>
+                    <div className="bg-blue-50 rounded-xl p-4 space-y-3">
+                      <div className="flex items-center gap-2">
+                        <Music className="text-blue-400" size={16} />
+                        <span className="text-xs text-gray-500">歌曲名</span>
+                        <span className="text-sm font-medium text-blue-800 ml-auto">{aiParseResult.songName}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <User className="text-blue-400" size={16} />
+                        <span className="text-xs text-gray-500">歌手</span>
+                        <span className="text-sm font-medium text-blue-800 ml-auto">{aiParseResult.artist}</span>
+                      </div>
+                      {aiParseResult.album && (
+                        <div className="flex items-center gap-2">
+                          <Disc className="text-blue-400" size={16} />
+                          <span className="text-xs text-gray-500">专辑</span>
+                          <span className="text-sm font-medium text-blue-800 ml-auto">{aiParseResult.album}</span>
+                        </div>
+                      )}
+                      {aiParseResult.tags && aiParseResult.tags.length > 0 && (
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <Tag className="text-blue-400" size={16} />
+                          <span className="text-xs text-gray-500">标签</span>
+                          <div className="flex gap-2 ml-auto flex-wrap">
+                            {aiParseResult.tags.map((tag, index) => {
+                              const tagColorOptions = [
+                                { bg: 'bg-blue-50', text: 'text-blue-700', border: 'border-blue-200' },
+                                { bg: 'bg-cyan-50', text: 'text-cyan-700', border: 'border-cyan-200' },
+                                { bg: 'bg-indigo-50', text: 'text-indigo-700', border: 'border-indigo-200' },
+                                { bg: 'bg-sky-50', text: 'text-sky-700', border: 'border-sky-200' },
+                                { bg: 'bg-teal-50', text: 'text-teal-700', border: 'border-teal-200' },
+                                { bg: 'bg-blue-100', text: 'text-blue-800', border: 'border-blue-300' }
+                              ];
+                              const color = tagColorOptions[index % tagColorOptions.length];
+                              return (
+                                <span key={tag} className={`inline-flex items-center gap-1 px-2 py-1 ${color.bg} ${color.text} ${color.border} border rounded-full text-xs`}>
+                                  {tag}
+                                </span>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* AI搜索结果 */}
+                {aiSearchResults.length > 0 && (
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-medium text-blue-800">匹配的歌曲</span>
+                    </div>
+                    <div className="space-y-2 max-h-48 overflow-y-auto">
+                      {aiSearchResults.map((song) => (
+                        <div
+                          key={song.id}
+                          onClick={() => handleSelectAiSong(song)}
+                          className={`p-3 border rounded-lg cursor-pointer transition-all hover:border-blue-400 hover:bg-blue-50 ${
+                            selectedSong?.id === song.id ? 'border-blue-500 bg-blue-50' : 'border-gray-200'
+                          }`}
+                        >
+                          <div className="flex items-center gap-3">
+                            {song.coverUrl ? (
+                              <img
+                                src={song.coverUrl}
+                                alt={`${song.name} cover`}
+                                className="w-10 h-10 rounded object-cover flex-shrink-0"
+                              />
+                            ) : (
+                              <div className="w-10 h-10 rounded bg-blue-100 flex items-center justify-center flex-shrink-0">
+                                  <Music className="text-blue-400" size={16} />
+                              </div>
+                            )}
+                            <div className="flex-1 min-w-0">
+                              <div className="font-medium text-blue-800 truncate">
+                                {song.name}
+                              </div>
+                              <div className="text-xs text-gray-500 truncate">
+                                {song.artist} · {song.album}
+                              </div>
+                            </div>
+                            {selectedSong && selectedSong.id === song.id && (
+                              <Check className="text-blue-500 flex-shrink-0" size={16} />
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* 手动补充标签 */}
+                {aiParseResult && (
+                  <div>
+                    <div className="flex items-center gap-2 mb-2">
+                      <Tag className="text-blue-400" size={14} />
+                      <span className="text-xs text-gray-500">补充标签</span>
+                    </div>
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={newTag}
+                        onChange={(e) => setNewTag(e.target.value)}
+                        onKeyPress={(e) => e.key === 'Enter' && handleAddTag(e as any)}
+                        placeholder="添加更多标签"
+                        className="flex-1 px-3 py-2 bg-blue-50 border border-blue-200 rounded-lg focus:ring-2 focus:ring-blue-400 focus:border-blue-400 outline-none transition-all text-sm placeholder-gray-400"
+                      />
+                      <button
+                        onClick={handleAddTag}
+                        disabled={!newTag.trim()}
+                        className="px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        添加
+                      </button>
+                    </div>
                   </div>
                 )}
               </div>
