@@ -20,6 +20,7 @@ import { useNavigation } from './hooks/useNavigation';
 import { BannerCarousel } from './components/BannerCarousel';
 import { StatsBar } from './components/StatsBar';
 import { RecentAlbums } from './components/RecentAlbums';
+import { LyricsSearchResult } from './components/LyricsSearchResult';
 
 // Constants
 const MENU_CLOSE_DELAY = 200;
@@ -56,7 +57,7 @@ const AppContent: React.FC = () => {
   // Search & Filter State
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedTag, setSelectedTag] = useState<string | null>(null);
-  const [searchType, setSearchType] = useState<'song' | 'album' | 'artist'>('song');
+  const [searchType, setSearchType] = useState<'song' | 'album' | 'artist' | 'lyrics'>('song');
   const [displayLimit, setDisplayLimit] = useState(50);
   
   // 缺失歌词筛选状态（持久化到 localStorage）
@@ -313,7 +314,7 @@ const AppContent: React.FC = () => {
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400" size={18} />
                 <input
                   type="text"
-                  placeholder={searchType === 'song' ? '搜索歌曲...' : searchType === 'album' ? '搜索专辑...' : '搜索歌手...'}
+                  placeholder={searchType === 'song' ? '搜索歌曲...' : searchType === 'album' ? '搜索专辑...' : searchType === 'artist' ? '搜索歌手...' : '搜索歌词...'}
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="w-full pl-10 pr-20 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-light focus:border-brand-light outline-none text-sm"
@@ -344,6 +345,14 @@ const AppContent: React.FC = () => {
                     }`}
                   >
                     歌手
+                  </button>
+                  <button
+                    onClick={() => { setSearchType('lyrics'); setSearchQuery(''); }}
+                    className={`px-1.5 py-0.5 rounded text-[10px] font-medium transition-colors ${
+                      searchType === 'lyrics' ? 'bg-white text-brand-light shadow-sm' : 'text-slate-500 hover:text-slate-700'
+                    }`}
+                  >
+                    歌词
                   </button>
                 </div>
               </div>
@@ -425,12 +434,13 @@ const AppContent: React.FC = () => {
               <div className="space-y-3">
                 <div className="flex items-center justify-between px-1">
                   <h2 className="text-base font-bold text-slate-800">
-                    {searchType === 'song' ? '歌曲结果' : searchType === 'album' ? '专辑结果' : '歌手结果'}
+                    {searchType === 'song' ? '歌曲结果' : searchType === 'album' ? '专辑结果' : searchType === 'artist' ? '歌手结果' : '歌词结果'}
                   </h2>
                   <span className="text-xs text-slate-400">
                     {searchType === 'song' ? `${filteredHomeSongs.length} 首歌曲`
                       : searchType === 'album' ? `${filteredAlbums.length} 张专辑`
-                      : `${filteredArtists.length} 位歌手`}
+                      : searchType === 'artist' ? `${filteredArtists.length} 位歌手`
+                      : '关键词搜索'}
                   </span>
                 </div>
 
@@ -522,6 +532,17 @@ const AppContent: React.FC = () => {
                       <p className="text-slate-500 text-sm">未找到匹配的歌手</p>
                     </div>
                   )
+                )}
+
+                {/* Lyrics Results */}
+                {isSearching && searchType === 'lyrics' && (
+                  <LyricsSearchResult
+                    songs={songs}
+                    searchQuery={searchQuery}
+                    onSongClick={navigateToSongDetail}
+                    onArtistClick={navigateToArtistDetail}
+                    onAlbumClick={navigateToAlbumDetail}
+                  />
                 )}
               </div>
             ) : homeViewMode === 'allSongs' ? (
